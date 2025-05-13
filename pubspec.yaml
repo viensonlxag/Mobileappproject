@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations: # <-- ĐÃ THÊM ĐỂ SỬA LỖI
+    sdk: flutter         # <-- ĐÃ THÊM ĐỂ SỬA LỖI
+
   cupertino_icons: ^1.0.2
   provider: ^6.0.0
 
@@ -26,7 +29,7 @@ dependencies:
   timezone: ^0.10.0 # Check for latest stable version
 
   # Formatting dates
-  intl: ^0.20.2 # Check for latest stable version
+  intl: ^0.19.0 # <-- ĐÃ THAY ĐỔI PHIÊN BẢN ĐỂ SỬA LỖI XUNG ĐỘT
 
   # Pie Chart
   pie_chart: ^5.4.0 # Added dependency
