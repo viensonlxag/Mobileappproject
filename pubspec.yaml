@@ -1,4 +1,4 @@
-name: expense_tracker
+name: expense_tracker_fixed
 description: A Flutter application to track expenses using Firebase.
 publish_to: 'none'
 version: 1.0.0+1

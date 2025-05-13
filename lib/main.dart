@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'services/notification_service.dart';
-import 'screens/login_screen.dart';
+import 'routes.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -12,6 +12,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await NotificationService.init();
+
   runApp(const ExpenseTrackerApp());
 }
 
@@ -30,7 +31,8 @@ class ExpenseTrackerApp extends StatelessWidget {
           useMaterial3: true,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: const LoginScreen(),
+        initialRoute: Routes.login,
+        onGenerateRoute: Routes.generateRoute, // ✅ Chuyển qua generateRoute chuẩn
       ),
     );
   }

@@ -10,7 +10,7 @@
   },
   "cxxBuildFolder": "C:\\expense_tracker_fixed\\android\\app\\.cxx\\Debug\\1l41244a\\x86",
   "soFolder": "C:\\expense_tracker_fixed\\android\\app\\build\\intermediates\\cxx\\Debug\\1l41244a\\obj\\x86",
-  "soRepublishFolder": "C:\\expense_tracker_fixed\\android\\app\\build\\intermediates\\cmake\\debug\\obj\\x86",
+  "soRepublishFolder": "C:\\expense_tracker_fixed\\android\\app\\build\\intermediates\\cmake\\profile\\obj\\x86",
   "abiPlatformVersion": 23,
   "cmake": {
     "effectiveConfiguration": {
@@ -25,7 +25,7 @@
     ],
     "cFlagsList": [],
     "cppFlagsList": [],
-    "variantName": "debug",
+    "variantName": "profile",
     "isDebuggableEnabled": true,
     "validAbiList": [
       "armeabi-v7a",

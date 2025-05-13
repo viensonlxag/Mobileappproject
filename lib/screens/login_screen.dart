@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
-import 'home_screen.dart';
+import '../routes.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -15,10 +15,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailC = TextEditingController();
   final _passC = TextEditingController();
   bool _isLogin = true;
+  bool _loading = false;
 
   @override
   Widget build(BuildContext context) {
     final prov = context.read<AppProvider>();
+
     return Scaffold(
       appBar: AppBar(title: Text(_isLogin ? 'Đăng nhập' : 'Đăng ký')),
       body: Padding(
@@ -40,28 +42,47 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () async {
+                onPressed: _loading
+                    ? null
+                    : () async {
                   if (!_formKey.currentState!.validate()) return;
+
+                  setState(() => _loading = true);
+
                   try {
                     if (_isLogin) {
-                      await prov.signIn(_emailC.text, _passC.text);
+                      await prov.signIn(_emailC.text.trim(), _passC.text.trim());
                     } else {
-                      await prov.register(_emailC.text, _passC.text);
+                      await prov.register(_emailC.text.trim(), _passC.text.trim());
                     }
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
-                  } catch (e) {
+
+                    if (!mounted) return; // ✅ Check context còn sống
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.toString())),
+                      SnackBar(content: Text(_isLogin ? 'Đăng nhập thành công' : 'Đăng ký thành công')),
                     );
+
+                    Navigator.pushReplacementNamed(context, Routes.home);
+                  } catch (e) {
+                    if (!mounted) return; // ✅ Check context còn sống
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+                    );
+                  } finally {
+                    if (mounted) {
+                      setState(() => _loading = false);
+                    }
                   }
                 },
-                child: Text(_isLogin ? 'Đăng nhập' : 'Đăng ký'),
+                child: _loading
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : Text(_isLogin ? 'Đăng nhập' : 'Đăng ký'),
               ),
               TextButton(
-                onPressed: () => setState(() => _isLogin = !_isLogin),
+                onPressed: _loading ? null : () => setState(() => _isLogin = !_isLogin),
                 child: Text(_isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'),
               ),
             ],

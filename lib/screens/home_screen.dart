@@ -1,61 +1,43 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/app_provider.dart';
-import '../widgets/transaction_tile.dart';
-import 'add_transaction_screen.dart';
-import 'history_screen.dart';
-import 'settings_screen.dart';
+import '../routes.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
-  final _titles = ['Tổng quan', 'Lịch sử', 'Cài đặt'];
-
-  @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
-    final tabs = [
-      ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Số dư: ...',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Home'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.pushNamed(context, Routes.settings);
+            },
           ),
-          const SizedBox(height: 16),
-          ...provider.transactions.take(5).map((tx) => TransactionTile(tx)),
         ],
       ),
-      const HistoryScreen(),
-      const SettingsScreen(),
-    ];
-
-    return Scaffold(
-      appBar: AppBar(title: Text(_titles[_currentIndex])),
-      body: tabs[_currentIndex],
-      floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Home Screen'),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, Routes.addTransaction);
+              },
+              child: const Text('Add Transaction'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, Routes.history);
+              },
+              child: const Text('View History'),
+            ),
+          ],
         ),
-        child: const Icon(Icons.add),
-      )
-          : null,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Tổng quan'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Lịch sử'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Cài đặt'),
-        ],
       ),
     );
   }

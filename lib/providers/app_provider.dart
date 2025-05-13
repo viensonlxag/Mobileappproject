@@ -17,6 +17,7 @@ class AppProvider extends ChangeNotifier {
         _firestoreService = FirestoreService(user!.uid);
         _listenTransactions();
       } else {
+        _firestoreService = null;
         transactions = [];
       }
       notifyListeners();
@@ -32,9 +33,48 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> signIn(String email, String pass) => _authService.signIn(email, pass);
-  Future<void> register(String email, String pass) => _authService.register(email, pass);
-  Future<void> signOut() => _authService.signOut();
-  Future<void> addTransaction(ExpenseTransaction tx) => _firestoreService!.addTransaction(tx);
-  Future<void> deleteTransaction(String id) => _firestoreService!.deleteTransaction(id);
+  /// Đăng nhập user
+  Future<void> signIn(String email, String pass) async {
+    try {
+      await _authService.signIn(email, pass);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Đăng ký tài khoản
+  Future<void> register(String email, String pass) async {
+    try {
+      await _authService.register(email, pass);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Đăng xuất user
+  Future<void> signOut() async {
+    try {
+      await _authService.signOut();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Thêm giao dịch mới
+  Future<void> addTransaction(ExpenseTransaction tx) async {
+    if (_firestoreService != null) {
+      await _firestoreService!.addTransaction(tx);
+    } else {
+      throw Exception('User chưa đăng nhập');
+    }
+  }
+
+  /// Xoá giao dịch theo ID
+  Future<void> deleteTransaction(String id) async {
+    if (_firestoreService != null) {
+      await _firestoreService!.deleteTransaction(id);
+    } else {
+      throw Exception('User chưa đăng nhập');
+    }
+  }
 }
