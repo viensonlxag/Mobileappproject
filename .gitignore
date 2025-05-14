@@ -2,13 +2,13 @@
 .dart_tool/
 .packages
 .pub-cache/
+.pub/
 build/
-.idea/
-.metadata
-.macos/
 .flutter-plugins
 .flutter-plugins-dependencies
 generated_plugin_registrant.dart
+.macos/
+.metadata
 
 # iOS related
 ios/Flutter/Flutter.framework
@@ -18,35 +18,64 @@ ios/ServiceDefinitions.json
 ios/Runner/GeneratedPluginRegistrant.*
 ios/Pods/
 ios/Podfile.lock
+ios/.symlinks
+ios/build/
+ios/Flutter/App.framework
+ios/Flutter/engine/
 
 # Android related
 android/.gradle/
 android/captures/
 android/app/build/
+android/build/
+android/local.properties
+android/.idea/
 
-# VS Code related
+# Web
+web/build/
+
+# macOS
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Flutter/ephemeral/
+macos/build/
+
+# Windows
+windows/Flutter/ephemeral/
+windows/build/
+
+# Linux
+linux/Flutter/ephemeral/
+linux/build/
+
+# VS Code
 .vscode/
 
-# Xcode related
-xcuserdata/
-DerivedData/
-*.xcworkspace
-*.xcodeproj/
-
-# IntelliJ related
+# IntelliJ / Android Studio
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# Others
-*.log
-*.lock
-*.DS_Store
+# Xcode
+*.xcworkspace
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+
+# Firebase / Keys / Sensitive
+google-services.json
+GoogleService-Info.plist
 *.jks
 *.keystore
-!.gitignore
-
-# Environment files
 .env
 .env.*
+
+# Logs / temp / misc
+*.log
+*.tmp
+*.DS_Store
+*.lock
+
+# LFS tracking markers
+*.gitattributes
+!.gitignore
