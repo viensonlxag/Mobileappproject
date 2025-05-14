@@ -26,12 +26,18 @@ class AppProvider extends ChangeNotifier {
   }
 
   void _setError(String? message) {
-    _errorMessage = message;
-    notifyListeners();
+    if (_errorMessage != message) { // Chỉ notify nếu message thực sự thay đổi
+      _errorMessage = message;
+      notifyListeners();
+    }
   }
 
-  void _clearError() {
-    _errorMessage = null;
+  // Đổi thành public và thêm notifyListeners nếu cần
+  void clearError() {
+    if (_errorMessage != null) { // Chỉ notify nếu có lỗi để xóa
+      _errorMessage = null;
+      notifyListeners();
+    }
   }
   // --- KẾT THÚC TRẠNG THÁI TẢI VÀ LỖI ---
 
@@ -50,7 +56,7 @@ class AppProvider extends ChangeNotifier {
   AppProvider() {
     _authService.userChanges.listen((firebaseUser) async {
       _setLoading(true);
-      _clearError();
+      clearError(); // Sử dụng hàm public
       _currentUser = firebaseUser;
       if (_currentUser != null) {
         _firestoreService = FirestoreService(_currentUser!.uid);
@@ -118,7 +124,7 @@ class AppProvider extends ChangeNotifier {
       return;
     }
     _setLoading(true);
-    _clearError();
+    clearError();
     final oldName = _userName;
     try {
       _userName = newName.trim().isEmpty ? (_currentUser?.displayName ?? "Bạn") : newName.trim();
@@ -141,7 +147,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateUserDateOfBirth(DateTime newDateOfBirth) async {
     _setLoading(true);
-    _clearError();
+    clearError();
     try {
       _userDateOfBirth = newDateOfBirth;
       final prefs = await SharedPreferences.getInstance();
@@ -173,7 +179,7 @@ class AppProvider extends ChangeNotifier {
   double get totalExpense {
     return currentMonthTransactions
         .where((tx) => (tx.amount ?? 0.0) < 0)
-        .fold<double>(0.0, (double sum, ExpenseTransaction tx) { // Thêm kiểu rõ ràng cho sum
+        .fold<double>(0.0, (double sum, ExpenseTransaction tx) {
       final double currentAmount = tx.amount?.abs() ?? 0.0;
       return sum + currentAmount;
     });
@@ -182,7 +188,7 @@ class AppProvider extends ChangeNotifier {
   double get totalIncome {
     return currentMonthTransactions
         .where((tx) => (tx.amount ?? 0.0) > 0)
-        .fold<double>(0.0, (double sum, ExpenseTransaction tx) { // Thêm kiểu rõ ràng cho sum
+        .fold<double>(0.0, (double sum, ExpenseTransaction tx) {
       final double currentAmount = tx.amount ?? 0.0;
       return sum + currentAmount;
     });
@@ -192,8 +198,8 @@ class AppProvider extends ChangeNotifier {
     final Map<String, double> data = {};
     for (var tx in currentMonthTransactions) {
       if ((tx.amount ?? 0.0) < 0) {
-        final double currentCategoryAmount = data[tx.category] ?? 0.0; // Đảm bảo không null
-        final double transactionAmount = tx.amount?.abs() ?? 0.0; // Đảm bảo không null
+        final double currentCategoryAmount = data[tx.category] ?? 0.0;
+        final double transactionAmount = tx.amount?.abs() ?? 0.0;
         data[tx.category] = currentCategoryAmount + transactionAmount;
       }
     }
@@ -204,7 +210,7 @@ class AppProvider extends ChangeNotifier {
     final currentMonthExp = totalExpense;
     final prevMonthExp = previousMonthTransactions
         .where((tx) => (tx.amount ?? 0.0) < 0)
-        .fold<double>(0.0, (double sum, ExpenseTransaction tx) { // Thêm kiểu rõ ràng cho sum
+        .fold<double>(0.0, (double sum, ExpenseTransaction tx) {
       final double currentAmount = tx.amount?.abs() ?? 0.0;
       return sum + currentAmount;
     });
@@ -235,7 +241,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> signIn(String email, String pass) async {
     _setLoading(true);
-    _clearError();
+    clearError(); // Sử dụng hàm public
     try {
       await _authService.signIn(email, pass);
     } catch (e) {
@@ -248,7 +254,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> register(String email, String pass) async {
     _setLoading(true);
-    _clearError();
+    clearError(); // Sử dụng hàm public
     try {
       await _authService.register(email, pass);
     } catch (e) {
@@ -261,7 +267,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> appSignOut(BuildContext context) async {
     _setLoading(true);
-    _clearError();
+    clearError(); // Sử dụng hàm public
     try {
       await _authService.signOut();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -283,7 +289,7 @@ class AppProvider extends ChangeNotifier {
       throw Exception('User chưa đăng nhập để thêm giao dịch');
     }
     _setLoading(true);
-    _clearError();
+    clearError(); // Sử dụng hàm public
     try {
       await _firestoreService!.addTransaction(tx);
     } catch (e) {
@@ -300,7 +306,7 @@ class AppProvider extends ChangeNotifier {
       throw Exception('User chưa đăng nhập để cập nhật giao dịch');
     }
     _setLoading(true);
-    _clearError();
+    clearError(); // Sử dụng hàm public
     try {
       await _firestoreService!.updateTransaction(updatedTx);
     } catch (e) {
@@ -317,7 +323,7 @@ class AppProvider extends ChangeNotifier {
       throw Exception('User chưa đăng nhập để xóa giao dịch');
     }
     _setLoading(true);
-    _clearError();
+    clearError(); // Sử dụng hàm public
     try {
       await _firestoreService!.deleteTransaction(id);
     } catch (e) {
