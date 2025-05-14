@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart'; // Import intl cho NumberFormat
+import 'package:intl/intl.dart'; // Import intl cho NumberFormat và DateFormat
 import '../services/auth_service.dart'; // Đảm bảo đường dẫn này đúng
 import '../services/firestore_service.dart'; // Đảm bảo đường dẫn này đúng
 import '../models/expense_transaction.dart'; // Đảm bảo đường dẫn này đúng
@@ -26,27 +26,25 @@ class AppProvider extends ChangeNotifier {
   }
 
   void _setError(String? message) {
-    if (_errorMessage != message) { // Chỉ notify nếu message thực sự thay đổi
+    if (_errorMessage != message) {
       _errorMessage = message;
       notifyListeners();
     }
   }
 
-  // Đổi thành public và thêm notifyListeners nếu cần
   void clearError() {
-    if (_errorMessage != null) { // Chỉ notify nếu có lỗi để xóa
+    if (_errorMessage != null) {
       _errorMessage = null;
       notifyListeners();
     }
   }
   // --- KẾT THÚC TRẠNG THÁI TẢI VÀ LỖI ---
 
-
   String _userName = "Bạn";
   DateTime? _userDateOfBirth;
 
-  static const String _userNameKey = 'app_user_name_v2_3_1';
-  static const String _userDateOfBirthKey = 'app_user_dob_v2_3_1';
+  static const String _userNameKey = 'app_user_name_v2_3_1_barchart_recent'; // Cập nhật key nếu cần
+  static const String _userDateOfBirthKey = 'app_user_dob_v2_3_1_barchart_recent';
 
   User? get currentUser => _currentUser;
   String get userName => _userName;
@@ -56,7 +54,7 @@ class AppProvider extends ChangeNotifier {
   AppProvider() {
     _authService.userChanges.listen((firebaseUser) async {
       _setLoading(true);
-      clearError(); // Sử dụng hàm public
+      clearError();
       _currentUser = firebaseUser;
       if (_currentUser != null) {
         _firestoreService = FirestoreService(_currentUser!.uid);
@@ -66,7 +64,7 @@ class AppProvider extends ChangeNotifier {
         _firestoreService = null;
         _transactions = [];
         _resetUserProfile();
-        _calculateTotals();
+        // _calculateTotals(); // Getters sẽ tự tính
       }
       _setLoading(false);
     });
@@ -76,19 +74,16 @@ class AppProvider extends ChangeNotifier {
     if (_firestoreService == null) {
       print("AppProvider: FirestoreService is null, cannot listen to transactions.");
       _transactions = [];
-      _calculateTotals();
       notifyListeners();
       return;
     }
     _firestoreService!.streamTransactions().listen((txList) {
       _transactions = txList;
-      _calculateTotals();
-      notifyListeners();
+      notifyListeners(); // Getters sẽ tự tính toán khi UI build lại
     }, onError: (error) {
       print("AppProvider: Lỗi lắng nghe transactions: $error");
       _setError("Không thể tải danh sách giao dịch: ${error.toString()}");
       _transactions = [];
-      _calculateTotals();
       notifyListeners();
     });
   }
@@ -98,18 +93,14 @@ class AppProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _userName = prefs.getString(_userNameKey) ?? _currentUser?.displayName ?? "Bạn";
-
       final dobMillis = prefs.getInt(_userDateOfBirthKey);
-      if (dobMillis != null) {
-        _userDateOfBirth = DateTime.fromMillisecondsSinceEpoch(dobMillis);
-      } else {
-        _userDateOfBirth = null;
-      }
+      _userDateOfBirth = dobMillis != null ? DateTime.fromMillisecondsSinceEpoch(dobMillis) : null;
       if (_userName == "Bạn" && _currentUser?.displayName != null && _currentUser!.displayName!.isNotEmpty) {
         _userName = _currentUser!.displayName!;
       }
     } catch (e) {
       print("AppProvider: Lỗi tải user profile: $e");
+      _setError("Lỗi tải thông tin người dùng.");
     }
   }
 
@@ -239,9 +230,78 @@ class AppProvider extends ChangeNotifier {
     return sortedTx.take(5).toList();
   }
 
+  // --- GETTERS CHO BAR CHART ---
+  Map<int, double> get dailyExpensesCurrentMonth {
+    final Map<int, double> dailyData = {};
+    final now = DateTime.now();
+    final currentMonthTxs = _transactions.where((tx) =>
+    tx.date.year == now.year &&
+        tx.date.month == now.month &&
+        (tx.amount ?? 0.0) < 0);
+
+    for (var tx in currentMonthTxs) {
+      dailyData.update(
+        tx.date.day,
+            (value) => value + (tx.amount?.abs() ?? 0.0),
+        ifAbsent: () => (tx.amount?.abs() ?? 0.0),
+      );
+    }
+    return dailyData;
+  }
+
+  /// Trả về Map chi tiêu theo tháng cho N tháng gần nhất (bao gồm tháng hiện tại).
+  /// Key: Tên tháng (String, ví dụ "Thg 1"), Value: tổng chi tiêu (double).
+  /// Dữ liệu được sắp xếp từ tháng cũ nhất đến tháng mới nhất.
+  List<MapEntry<String, double>> getRecentMonthlyExpenses({int numberOfMonths = 6}) {
+    final List<MapEntry<String, double>> monthlyDataList = [];
+    final now = DateTime.now();
+    final monthFormat = DateFormat('MMM', 'vi_VN'); // Ví dụ: "Thg 1"
+
+    for (int i = numberOfMonths - 1; i >= 0; i--) {
+      // Tính toán tháng và năm cho từng mục trong quá khứ
+      DateTime targetMonthDateTime = DateTime(now.year, now.month - i, 1);
+
+      double totalForMonth = _transactions
+          .where((tx) =>
+      tx.date.year == targetMonthDateTime.year &&
+          tx.date.month == targetMonthDateTime.month &&
+          (tx.amount ?? 0.0) < 0)
+          .fold(0.0, (sum, tx) => sum + (tx.amount?.abs() ?? 0.0));
+
+      monthlyDataList.add(MapEntry(monthFormat.format(targetMonthDateTime), totalForMonth));
+    }
+    return monthlyDataList;
+  }
+
+  // Giữ lại getter cũ nếu bạn vẫn muốn có tùy chọn xem cả năm
+  Map<String, double> get monthlyExpensesCurrentYear {
+    final Map<String, double> monthlyData = {};
+    final now = DateTime.now();
+    final currentYearTxs = _transactions.where((tx) =>
+    tx.date.year == now.year &&
+        (tx.amount ?? 0.0) < 0);
+
+    final monthFormat = DateFormat('MMM', 'vi_VN');
+
+    for (int i = 1; i <= 12; i++) {
+      monthlyData[monthFormat.format(DateTime(now.year, i))] = 0.0;
+    }
+
+    for (var tx in currentYearTxs) {
+      String monthKey = monthFormat.format(tx.date);
+      monthlyData.update(
+        monthKey,
+            (value) => value + (tx.amount?.abs() ?? 0.0),
+        ifAbsent: () => (tx.amount?.abs() ?? 0.0),
+      );
+    }
+    return monthlyData;
+  }
+  // --- KẾT THÚC GETTERS CHO BAR CHART ---
+
   Future<void> signIn(String email, String pass) async {
     _setLoading(true);
-    clearError(); // Sử dụng hàm public
+    clearError();
     try {
       await _authService.signIn(email, pass);
     } catch (e) {
@@ -254,7 +314,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> register(String email, String pass) async {
     _setLoading(true);
-    clearError(); // Sử dụng hàm public
+    clearError();
     try {
       await _authService.register(email, pass);
     } catch (e) {
@@ -267,7 +327,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> appSignOut(BuildContext context) async {
     _setLoading(true);
-    clearError(); // Sử dụng hàm public
+    clearError();
     try {
       await _authService.signOut();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -289,7 +349,7 @@ class AppProvider extends ChangeNotifier {
       throw Exception('User chưa đăng nhập để thêm giao dịch');
     }
     _setLoading(true);
-    clearError(); // Sử dụng hàm public
+    clearError();
     try {
       await _firestoreService!.addTransaction(tx);
     } catch (e) {
@@ -306,7 +366,7 @@ class AppProvider extends ChangeNotifier {
       throw Exception('User chưa đăng nhập để cập nhật giao dịch');
     }
     _setLoading(true);
-    clearError(); // Sử dụng hàm public
+    clearError();
     try {
       await _firestoreService!.updateTransaction(updatedTx);
     } catch (e) {
@@ -323,7 +383,7 @@ class AppProvider extends ChangeNotifier {
       throw Exception('User chưa đăng nhập để xóa giao dịch');
     }
     _setLoading(true);
-    clearError(); // Sử dụng hàm public
+    clearError();
     try {
       await _firestoreService!.deleteTransaction(id);
     } catch (e) {

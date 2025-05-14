@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart'; // Đã chuyển sang fl_chart
+import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'dart:math' as math;
 
 import '../providers/app_provider.dart';
 import '../routes.dart';
@@ -12,8 +13,7 @@ import '../utils/category_helper.dart';
 // _StylizedSLogo, HomeScreen, _HomeScreenState, PlaceholderWidget, _HomeContent,
 // _SectionTitle, _WelcomeBanner, _QuickActionsSection, _QuickActionItem,
 // _OverviewSection, _InfoCard giữ nguyên như phiên bản trước.
-// Nội dung của các widget đó sẽ không được lặp lại ở đây để tiết kiệm không gian.
-// Chỉ phần _CategoryPieChartSection được sửa đổi hoàn toàn.
+// Chỉ phần _CategoryPieChartSection được sửa đổi.
 
 class _StylizedSLogo extends StatelessWidget {
   final Color backgroundColor;
@@ -237,10 +237,8 @@ class _HomeContent extends StatelessWidget {
             const _SectionTitle(title: 'Tình hình thu chi'),
             const SizedBox(height: 12),
             const _OverviewSection(),
-            const SizedBox(height: 24),
-            const _SectionTitle(title: 'Phân bổ chi tiêu'),
             const SizedBox(height: 16),
-            const _CategoryPieChartSection(),
+            _CategoryPieChartSection(),
             const SizedBox(height: 60),
           ],
         ),
@@ -259,8 +257,8 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Text(
         title,
-        style: (Theme.of(context).textTheme.headlineSmall ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
-            .copyWith(color: Colors.grey[800]),
+        style: (Theme.of(context).textTheme.titleLarge ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
+            .copyWith(color: Colors.grey[850]),
       ),
     );
   }
@@ -543,7 +541,10 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-// --- WIDGET BIỂU ĐỒ TRÒN SỬ DỤNG FL_CHART (CẢI TIẾN UI THEO MẪU - NHÃN NGOÀI) ---
+// --- WIDGET BIỂU ĐỒ (PIE & BAR) ---
+enum ChartType { pie, bar }
+enum BarChartPeriod { daily, monthly }
+
 class _CategoryPieChartSection extends StatefulWidget {
   const _CategoryPieChartSection();
 
@@ -553,6 +554,8 @@ class _CategoryPieChartSection extends StatefulWidget {
 
 class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
   int _touchedIndex = -1;
+  ChartType _selectedChartType = ChartType.bar;
+  BarChartPeriod _selectedBarChartPeriod = BarChartPeriod.monthly;
 
   Widget _buildAdvancedLegendItem(BuildContext context, {
     required Color color,
@@ -564,7 +567,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
     final textTheme = Theme.of(context).textTheme;
     final Color baseTextColor = Colors.grey[800]!;
     final Color touchedColor = color;
-    final Color currentTextColor = isTouched ? touchedColor.withOpacity(0.9) : baseTextColor; // Nhạt hơn chút khi chạm
+    final Color currentTextColor = isTouched ? touchedColor.withOpacity(0.9) : baseTextColor;
     final FontWeight currentFontWeight = isTouched ? FontWeight.bold : FontWeight.w500;
 
     return Padding(
@@ -581,7 +584,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
             ),
           ),
           const SizedBox(width: 8),
-          Icon(categoryIcon, size: 18, color: isTouched ? touchedColor : color.withOpacity(0.8)),
+          Icon(categoryIcon, size: 18, color: isTouched ? touchedColor : color.withOpacity(0.85)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -589,7 +592,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
               style: textTheme.bodySmall?.copyWith(
                 fontWeight: currentFontWeight,
                 color: currentTextColor,
-                fontSize: 11.5, // Kích thước chữ cho tên danh mục
+                fontSize: 11.5,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -600,9 +603,396 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
             style: textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.bold,
               color: isTouched ? touchedColor : Colors.black.withOpacity(0.8),
-              fontSize: isTouched ? 11 : 10, // Kích thước chữ cho %
+              fontSize: isTouched ? 11 : 10.5,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPieChart(BuildContext context, AppProvider appProvider) {
+    final dataMap = appProvider.categoryBreakdown;
+    final textTheme = Theme.of(context).textTheme;
+    const TextStyle defaultTextStyle = TextStyle();
+
+    if (dataMap.isEmpty) {
+      return _buildNoDataWidget(context, "Không có chi tiêu tháng này để phân bổ.");
+    }
+
+    final double totalValue = dataMap.values.fold(0.0, (sum, item) => sum + item);
+    final sortedEntries = dataMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final List<Color> sectionColors = sortedEntries.map((entry) => CategoryHelper.getCategoryColor(entry.key, 'Chi tiêu')).toList();
+
+    List<PieChartSectionData> pieChartSections = [];
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final percentage = totalValue == 0 ? 0.0 : (entry.value / totalValue) * 100;
+      final bool isTouched = i == _touchedIndex;
+      pieChartSections.add(
+        PieChartSectionData(
+          color: sectionColors[i],
+          value: entry.value,
+          title: '${percentage.toStringAsFixed(0)}%',
+          radius: isTouched ? 48.0 : 38.0,
+          titleStyle: TextStyle(
+            fontSize: isTouched ? 10.0 : 8.0,
+            fontWeight: FontWeight.bold,
+            color: Colors.black.withOpacity(0.8),
+            shadows: const [Shadow(color: Colors.white70, blurRadius: 1)],
+          ),
+          showTitle: percentage > 1.5,
+          titlePositionPercentageOffset: 1.25,
+        ),
+      );
+    }
+
+    const int maxLegendItems = 5;
+    List<MapEntry<String, double>> legendEntriesToShow = sortedEntries.take(maxLegendItems).toList();
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          flex: 5,
+          child: AspectRatio(
+            aspectRatio: 0.9,
+            child: PieChart(
+              PieChartData(
+                pieTouchData: PieTouchData(
+                  touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                    setState(() {
+                      if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                        _touchedIndex = -1;
+                        return;
+                      }
+                      _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                    });
+                  },
+                ),
+                borderData: FlBorderData(show: false),
+                sectionsSpace: 1.5,
+                centerSpaceRadius: 40,
+                sections: pieChartSections,
+                startDegreeOffset: -90,
+              ),
+              swapAnimationDuration: const Duration(milliseconds: 250),
+              swapAnimationCurve: Curves.easeOutCubic,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: legendEntriesToShow.asMap().entries.map((indexedEntry) {
+              final index = indexedEntry.key;
+              final entry = indexedEntry.value;
+              final percentage = totalValue == 0 ? 0.0 : (entry.value / totalValue) * 100;
+              final categoryDetails = CategoryHelper.getCategoryDetails(entry.key, 'Chi tiêu');
+              if (percentage > 0.1) {
+                return _buildAdvancedLegendItem(
+                  context,
+                  color: sectionColors[index],
+                  categoryName: entry.key,
+                  categoryIcon: categoryDetails['icon'] as IconData,
+                  percentage: percentage,
+                  isTouched: index == _touchedIndex,
+                );
+              } else {
+                return const SizedBox.shrink();
+              }
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _getBottomTitleWidgets(double value, TitleMeta meta, BarChartPeriod period, BuildContext context, int daysInMonth, List<String> monthKeys) {
+    final textTheme = Theme.of(context).textTheme;
+    String text = '';
+    final int intValue = value.toInt();
+
+    if (period == BarChartPeriod.daily) {
+      int displayInterval = (daysInMonth / 5).ceil();
+      if (displayInterval < 2) displayInterval = 2;
+      if (displayInterval == 0 && daysInMonth > 0) displayInterval = 1;
+
+      if (intValue == 1 || intValue == daysInMonth || (daysInMonth > 10 && intValue % displayInterval == 0 && intValue != 0 && intValue < daysInMonth) ) {
+        text = intValue.toString();
+      } else if (daysInMonth <= 10 && intValue % 2 == 0 && intValue != 0) {
+        text = intValue.toString();
+      }
+    } else { // Monthly
+      final monthIndex = value.toInt();
+      if (monthIndex >= 0 && monthIndex < monthKeys.length) {
+        if (monthKeys.length <= 3 ) {
+          text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
+        } else {
+          if (monthIndex == 0 || monthIndex == monthKeys.length - 1 || monthIndex == (monthKeys.length / 2).floor()) {
+            text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
+          }
+        }
+      }
+    }
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return SideTitleWidget(
+        axisSide: meta.axisSide,
+        space: 4,
+        angle: 0,
+        child: Text(text, style: textTheme.labelSmall?.copyWith(fontSize: 9.5))
+    );
+  }
+
+  Widget _getLeftTitleWidgets(double value, TitleMeta meta, BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    if (value == meta.min && meta.min == 0) {
+      return SideTitleWidget(
+        axisSide: meta.axisSide,
+        space: 4,
+        child: Text("0", style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])), // Đổi màu cho số 0
+      );
+    }
+
+    final double interval = meta.appliedInterval;
+    // Chỉ hiển thị nhãn nếu giá trị là bội số của interval (hoặc gần bằng)
+    // và không phải là giá trị max (vì max có thể không phải là điểm chia đẹp)
+    if (value > meta.min && value < meta.max && ( (value % interval).abs() < 0.01 * interval || ((interval - (value % interval).abs()) < 0.01 * interval )) ) {
+      return SideTitleWidget(
+        axisSide: meta.axisSide,
+        space: 4,
+        child: Text(
+          // Chia cho 1,000,000 để có đơn vị triệu
+            NumberFormat("#,##0.#", "vi_VN").format(value / 1000000), // Hiển thị 1 chữ số thập phân nếu có
+            style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])
+        ),
+      );
+    }
+    // Hiển thị nhãn max nếu nó không quá gần nhãn trước đó và lớn hơn min
+    if (value == meta.max && meta.max > meta.min ) {
+      return SideTitleWidget(
+        axisSide: meta.axisSide,
+        space: 4,
+        child: Text(
+            NumberFormat("#,##0.#", "vi_VN").format(value / 1000000),
+            style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+
+  Widget _buildBarChart(BuildContext context, AppProvider appProvider) {
+    Map<int, double> dataForChartIntKeys = {};
+    double maxY = 0;
+    final textTheme = Theme.of(context).textTheme;
+    final now = DateTime.now();
+    final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
+
+    final List<MapEntry<String,double>> recentMonthlyExpenses = appProvider.getRecentMonthlyExpenses(numberOfMonths: 3);
+    final List<String> recentMonthKeys = recentMonthlyExpenses.map((e) => e.key).toList();
+
+
+    if (_selectedBarChartPeriod == BarChartPeriod.daily) {
+      dataForChartIntKeys = appProvider.dailyExpensesCurrentMonth;
+      if (dataForChartIntKeys.isNotEmpty) {
+        maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
+      }
+      maxY = (maxY == 0) ? 50000 : (maxY * 1.3).ceilToDouble();
+
+    } else { // Monthly - Sử dụng recentMonthlyExpenses
+      for(int i=0; i < recentMonthlyExpenses.length; i++){
+        dataForChartIntKeys[i] = recentMonthlyExpenses[i].value;
+      }
+      if (dataForChartIntKeys.isNotEmpty) {
+        maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
+      }
+      maxY = (maxY == 0) ? 1000000 : (maxY * 1.3).ceilToDouble();
+      if (maxY < 1000000 && maxY > 0) maxY = 1000000;
+    }
+
+    List<BarChartGroupData> barGroups = dataForChartIntKeys.entries.map((entry) {
+      Color barColor = (Theme.of(context).colorScheme.primaryContainer).withOpacity(0.6); // Màu nhạt hơn
+      if (_selectedBarChartPeriod == BarChartPeriod.monthly) {
+        if (entry.key == recentMonthlyExpenses.length - 1) { // Tháng hiện tại
+          barColor = Theme.of(context).colorScheme.primary; // Màu đậm
+        }
+      } else {
+        barColor = Theme.of(context).colorScheme.primary.withOpacity(0.85);
+      }
+
+      return BarChartGroupData(
+        x: entry.key,
+        barRods: [
+          BarChartRodData(
+            toY: entry.value,
+            color: barColor,
+            width: _selectedBarChartPeriod == BarChartPeriod.daily ? 10 : 28,
+            borderRadius: const BorderRadius.all(Radius.circular(5)),
+          )
+        ],
+      );
+    }).toList();
+
+    barGroups.sort((a,b) => a.x.compareTo(b.x));
+
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 0.0, right: 16.0, bottom: 8.0, left: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8.0, top: 4.0, bottom: 4.0), // Điều chỉnh padding cho "(Triệu)"
+            child: Text(
+              "(Triệu)",
+              style: textTheme.labelSmall?.copyWith(color: Colors.grey[600], fontSize: 9),
+            ),
+          ),
+          Expanded(
+            child: BarChart(
+              BarChartData(
+                maxY: maxY,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => Colors.grey.shade800.withOpacity(0.9),
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    tooltipMargin: 10,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      String title;
+                      if (_selectedBarChartPeriod == BarChartPeriod.daily) {
+                        title = 'Ngày ${group.x.toInt()}';
+                      } else {
+                        title = (group.x >=0 && group.x < recentMonthKeys.length) ? recentMonthKeys[group.x] : 'Tháng ${group.x +1}';
+                      }
+                      return BarTooltipItem(
+                        '$title\n',
+                        TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5, fontFamily: textTheme.bodyMedium?.fontFamily),
+                        children: <TextSpan>[
+                          TextSpan(
+                            text: NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0).format(rod.toY),
+                            style: TextStyle(
+                                color: Colors.yellow.shade700,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: textTheme.bodyMedium?.fontFamily
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) => _getBottomTitleWidgets(value, meta, _selectedBarChartPeriod, context, daysInMonth, recentMonthKeys),
+                      reservedSize: 28,
+                      interval: 1,
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (value, meta) => _getLeftTitleWidgets(value, meta, context),
+                      interval: maxY > 0 ? (maxY / 5).ceilToDouble() : null, // Khoảng 5-6 nhãn
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.shade300.withOpacity(0.5), strokeWidth: 0.7),
+                  horizontalInterval: maxY > 0 ? (maxY / 5).ceilToDouble() : 10000, // Khoảng 5-6 đường lưới
+                ),
+                barGroups: barGroups,
+                alignment: BarChartAlignment.spaceAround,
+              ),
+              swapAnimationDuration: const Duration(milliseconds: 300),
+              swapAnimationCurve: Curves.easeInOut,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int daysInMonth(int year, int month) => DateUtils.getDaysInMonth(year, month);
+
+  Widget _buildChartToggleButtons(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_selectedChartType == ChartType.pie ? 'Phân bổ danh mục' : 'Xu hướng chi tiêu', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ToggleButtons(
+                  isSelected: [_selectedChartType == ChartType.pie, _selectedChartType == ChartType.bar],
+                  onPressed: (int index) {
+                    setState(() {
+                      _selectedChartType = index == 0 ? ChartType.pie : ChartType.bar;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  selectedColor: Colors.white,
+                  fillColor: theme.colorScheme.primary,
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                  constraints: const BoxConstraints(minHeight: 36, minWidth: 42),
+                  children: const [
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.pie_chart_rounded, size: 20)),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.insert_chart_rounded, size: 20)),
+                  ],
+                ),
+              )
+            ],
+          ),
+          if (_selectedChartType == ChartType.bar) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ToggleButtons(
+                  isSelected: [_selectedBarChartPeriod == BarChartPeriod.daily, _selectedBarChartPeriod == BarChartPeriod.monthly],
+                  onPressed: (int index) {
+                    setState(() {
+                      _selectedBarChartPeriod = index == 0 ? BarChartPeriod.daily : BarChartPeriod.monthly;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  selectedColor: theme.colorScheme.onSecondary,
+                  fillColor: theme.colorScheme.secondary,
+                  color: theme.colorScheme.secondary.withOpacity(0.8),
+                  constraints: const BoxConstraints(minHeight: 32, minWidth: 65),
+                  textStyle: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+                  children: const [
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('NGÀY')),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('THÁNG')),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -611,167 +1001,88 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
   @override
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
-    final dataMap = appProvider.categoryBreakdown;
-    final textTheme = Theme.of(context).textTheme;
-    const TextStyle defaultTextStyle = TextStyle();
+    Widget chartView;
 
-    if (dataMap.isEmpty) {
-      return Container(
-        height: 180,
-        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-            color: Colors.white,
+    if (_selectedChartType == ChartType.pie) {
+      if (appProvider.categoryBreakdown.isEmpty) {
+        chartView = _buildNoDataWidget(context, "Không có chi tiêu tháng này để phân bổ.");
+      } else {
+        chartView = _buildPieChart(context, appProvider);
+      }
+    } else { // Bar Chart
+      bool noBarData = false;
+      if (_selectedBarChartPeriod == BarChartPeriod.daily) {
+        noBarData = appProvider.dailyExpensesCurrentMonth.isEmpty;
+      } else { // Monthly
+        noBarData = appProvider.getRecentMonthlyExpenses(numberOfMonths: 3).every((entry) => entry.value == 0.0);
+      }
+
+      if (noBarData) {
+        chartView = _buildNoDataWidget(context, "Không có dữ liệu chi tiêu cho khoảng thời gian này.");
+      } else {
+        chartView = _buildBarChart(context, appProvider);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildChartToggleButtons(context),
+        const SizedBox(height: 0),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          padding: const EdgeInsets.fromLTRB(8.0, 12.0, 8.0, 12.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color ?? Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade300, width: 0.8)
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.sentiment_dissatisfied_outlined, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text(
-                'Không có chi tiêu tháng này',
-                style: (textTheme.titleSmall ?? defaultTextStyle.copyWith(fontSize: 15)).copyWith(color: Colors.grey[700], fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Hãy thêm giao dịch để xem phân bổ nhé!',
-                style: (textTheme.bodyMedium ?? defaultTextStyle.copyWith(fontSize: 13)).copyWith(color: Colors.grey[600]),
-                textAlign: TextAlign.center,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.shade200,
+                blurRadius: 7,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    final double totalValue = dataMap.values.fold(0.0, (sum, item) => sum + item);
-
-    final sortedEntries = dataMap.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    List<PieChartSectionData> pieChartSections = [];
-    final List<Color> sectionColors = sortedEntries.map((entry) {
-      return CategoryHelper.getCategoryColor(entry.key, 'Chi tiêu');
-    }).toList();
-
-    for (int i = 0; i < sortedEntries.length; i++) {
-      final entry = sortedEntries[i];
-      final categoryValue = entry.value;
-      final percentage = totalValue == 0 ? 0.0 : (categoryValue / totalValue) * 100;
-      final Color color = sectionColors[i];
-
-      final bool isTouched = i == _touchedIndex;
-      final double radius = isTouched ? 48.0 : 38.0; // Bán kính khi chạm và không chạm
-      final double titleFontSize = isTouched ? 10.0 : 8.0;
-      // titlePositionPercentageOffset > 1 để đưa ra ngoài.
-      // Giá trị càng lớn, nhãn càng xa tâm.
-      final double titlePosition = 1.2; // Đẩy nhãn ra xa hơn
-
-      pieChartSections.add(
-        PieChartSectionData(
-          color: color,
-          value: categoryValue,
-          title: '${percentage.toStringAsFixed(0)}%',
-          radius: radius,
-          titleStyle: TextStyle(
-            fontSize: titleFontSize,
-            fontWeight: FontWeight.bold,
-            color: Colors.black.withOpacity(0.8), // Màu chữ tối cho dễ đọc
-            shadows: const [Shadow(color: Colors.white70, blurRadius: 1)], // Bóng trắng nhẹ
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            child: SizedBox(
+              key: ValueKey(_selectedChartType.toString() + _selectedBarChartPeriod.toString()),
+              height: 230,
+              child: chartView,
+            ),
           ),
-          showTitle: percentage > 1.5, // Chỉ hiển thị nếu % > 1.5%
-          titlePositionPercentageOffset: titlePosition,
         ),
-      );
-    }
+      ],
+    );
+  }
 
-    const int maxLegendItems = 5;
-    List<MapEntry<String, double>> legendEntriesToShow = sortedEntries.take(maxLegendItems).toList();
-
+  Widget _buildNoDataWidget(BuildContext context, String message) {
+    final textTheme = Theme.of(context).textTheme;
+    const TextStyle defaultTextStyle = TextStyle();
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      padding: const EdgeInsets.fromLTRB(12.0, 16.0, 12.0, 16.0), // Điều chỉnh padding
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color ?? Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200, // Shadow nhẹ hơn
-            blurRadius: 7,
-            offset: const Offset(0, 3), // Điều chỉnh offset
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            flex: 5, // Tỷ lệ cho biểu đồ
-            child: AspectRatio(
-              aspectRatio: 0.9, // Điều chỉnh tỷ lệ để biểu đồ cao hơn một chút
-              child: PieChart(
-                PieChartData(
-                  pieTouchData: PieTouchData(
-                    touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                      setState(() {
-                        if (!event.isInterestedForInteractions ||
-                            pieTouchResponse == null ||
-                            pieTouchResponse.touchedSection == null) {
-                          _touchedIndex = -1;
-                          return;
-                        }
-                        _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                      });
-                    },
-                  ),
-                  borderData: FlBorderData(show: false),
-                  sectionsSpace: 1.5, // Khoảng cách giữa các lát cắt
-                  centerSpaceRadius: 40, // Lỗ ở giữa lớn hơn
-                  sections: pieChartSections,
-                  startDegreeOffset: -90,
-                ),
-                swapAnimationDuration: const Duration(milliseconds: 250),
-                swapAnimationCurve: Curves.easeOutCubic,
-              ),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.highlight_off_rounded, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: (textTheme.titleSmall ?? defaultTextStyle.copyWith(fontSize: 15)).copyWith(color: Colors.grey[700], fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(width: 12), // Giảm khoảng cách
-          Expanded(
-            flex: 5, // Tỷ lệ cho chú giải
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center, // Căn giữa các mục chú giải
-              children: legendEntriesToShow.asMap().entries.map((indexedEntry) {
-                final index = indexedEntry.key;
-                final entry = indexedEntry.value;
-                final categoryName = entry.key;
-                final categoryValue = entry.value;
-                final percentage = totalValue == 0 ? 0.0 : (categoryValue / totalValue) * 100;
-
-                final categoryDetails = CategoryHelper.getCategoryDetails(categoryName, 'Chi tiêu');
-                final categoryColor = (index < sectionColors.length) ? sectionColors[index] : categoryDetails['color'] as Color;
-                final categoryIcon = categoryDetails['icon'] as IconData;
-
-                if (percentage > 0.1) {
-                  return _buildAdvancedLegendItem(
-                    context,
-                    color: categoryColor,
-                    categoryName: categoryName,
-                    categoryIcon: categoryIcon,
-                    percentage: percentage,
-                    isTouched: index == _touchedIndex,
-                  );
-                } else {
-                  return const SizedBox.shrink();
-                }
-              }).toList(),
+            const SizedBox(height: 4),
+            Text(
+              'Hãy thêm giao dịch để xem phân tích.',
+              style: (textTheme.bodyMedium ?? defaultTextStyle.copyWith(fontSize: 13)).copyWith(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
