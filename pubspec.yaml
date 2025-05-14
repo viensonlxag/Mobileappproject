@@ -31,8 +31,10 @@ dependencies:
   # Formatting dates
   intl: ^0.19.0
 
-  # Pie Chart
-  pie_chart: ^5.4.0
+
+
+  # fl_chart for bar, line, and pie charts
+  fl_chart: ^0.68.0
 
   # Shared Preferences
   shared_preferences: ^2.2.3

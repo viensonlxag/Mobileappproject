@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:pie_chart/pie_chart.dart';
+import 'package:fl_chart/fl_chart.dart'; // Đã chuyển sang fl_chart
+import 'package:intl/intl.dart';
 
 import '../providers/app_provider.dart';
 import '../routes.dart';
 import '../screens/history_screen.dart';
 import '../screens/settings_screen.dart';
+import '../utils/category_helper.dart';
 
-// Widget mới cho logo chữ "S" cách điệu
+// _StylizedSLogo, HomeScreen, _HomeScreenState, PlaceholderWidget, _HomeContent,
+// _SectionTitle, _WelcomeBanner, _QuickActionsSection, _QuickActionItem,
+// _OverviewSection, _InfoCard giữ nguyên như phiên bản trước.
+// Nội dung của các widget đó sẽ không được lặp lại ở đây để tiết kiệm không gian.
+// Chỉ phần _CategoryPieChartSection được sửa đổi hoàn toàn.
+
 class _StylizedSLogo extends StatelessWidget {
   final Color backgroundColor;
   final Color textColor;
@@ -24,7 +31,6 @@ class _StylizedSLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String? logoFontFamily = Theme.of(context).textTheme.headlineSmall?.fontFamily;
-
     return Container(
       width: circleSize,
       height: circleSize,
@@ -57,7 +63,6 @@ class _StylizedSLogo extends StatelessWidget {
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -68,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static final List<Widget> _widgetOptions = <Widget>[
     const _HomeContent(),
     const HistoryScreen(),
-    Container(), // Placeholder cho tab Ghi chép (chỉ điều hướng)
+    Container(),
     const PlaceholderWidget(screenName: 'Ngân sách'),
     const SettingsScreen(),
   ];
@@ -76,7 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onItemTapped(int index) {
     if (index == 2) {
       Navigator.pushNamed(context, Routes.addTransaction);
-      // Không setState để không chuyển tab khi chỉ điều hướng
     } else {
       setState(() {
         _selectedIndex = index;
@@ -84,16 +88,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Hàm xử lý khi nhấn nút back vật lý hoặc cử chỉ back
   Future<bool> _onWillPop() async {
     if (_selectedIndex != 0) {
-      // Nếu không ở tab Tổng quan (index 0), chuyển về tab Tổng quan
       setState(() {
         _selectedIndex = 0;
       });
-      return false; // Ngăn không cho pop route hiện tại (HomeScreen)
+      return false;
     }
-    // Nếu đang ở tab Tổng quan, cho phép hành vi pop mặc định (ví dụ: thoát app nếu đây là route cuối)
     return true;
   }
 
@@ -103,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color appBarForegroundColor = appBarTheme.foregroundColor ?? Colors.white;
     final String? titleFontFamily = appBarTheme.titleTextStyle?.fontFamily ?? Theme.of(context).textTheme.titleLarge?.fontFamily;
 
-    // Bọc Scaffold bằng WillPopScope
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
@@ -111,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? AppBar(
           backgroundColor: appBarTheme.backgroundColor,
           foregroundColor: appBarForegroundColor,
-          automaticallyImplyLeading: false, // Không tự thêm nút back ở đây
+          automaticallyImplyLeading: false,
           elevation: appBarTheme.elevation,
           title: Row(
             children: [
@@ -146,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
           ],
         )
-            : null, // Các tab khác (Sổ GD, Ngân sách, Cài đặt) sẽ có AppBar riêng nếu cần
+            : null,
         body: IndexedStack(
           index: _selectedIndex,
           children: _widgetOptions,
@@ -205,9 +205,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ... (Các widget _HomeContent, _SectionTitle, _WelcomeBanner, etc. giữ nguyên) ...
-// Đảm bảo các widget này không có logic điều hướng back riêng gây xung đột.
-
 class PlaceholderWidget extends StatelessWidget {
   final String screenName;
   const PlaceholderWidget({super.key, required this.screenName});
@@ -242,7 +239,7 @@ class _HomeContent extends StatelessWidget {
             const _OverviewSection(),
             const SizedBox(height: 24),
             const _SectionTitle(title: 'Phân bổ chi tiêu'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             const _CategoryPieChartSection(),
             const SizedBox(height: 60),
           ],
@@ -546,87 +543,235 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-class _CategoryPieChartSection extends StatelessWidget {
+// --- WIDGET BIỂU ĐỒ TRÒN SỬ DỤNG FL_CHART (CẢI TIẾN UI THEO MẪU - NHÃN NGOÀI) ---
+class _CategoryPieChartSection extends StatefulWidget {
   const _CategoryPieChartSection();
+
+  @override
+  State<_CategoryPieChartSection> createState() => _CategoryPieChartSectionState();
+}
+
+class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
+  int _touchedIndex = -1;
+
+  Widget _buildAdvancedLegendItem(BuildContext context, {
+    required Color color,
+    required String categoryName,
+    required IconData categoryIcon,
+    required double percentage,
+    bool isTouched = false,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    final Color baseTextColor = Colors.grey[800]!;
+    final Color touchedColor = color;
+    final Color currentTextColor = isTouched ? touchedColor.withOpacity(0.9) : baseTextColor; // Nhạt hơn chút khi chạm
+    final FontWeight currentFontWeight = isTouched ? FontWeight.bold : FontWeight.w500;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      child: Row(
+        children: [
+          Container(
+            width: isTouched ? 10 : 8,
+            height: isTouched ? 10 : 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+              border: isTouched ? Border.all(color: color.withOpacity(0.7), width: 1.5) : null,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(categoryIcon, size: 18, color: isTouched ? touchedColor : color.withOpacity(0.8)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              categoryName,
+              style: textTheme.bodySmall?.copyWith(
+                fontWeight: currentFontWeight,
+                color: currentTextColor,
+                fontSize: 11.5, // Kích thước chữ cho tên danh mục
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          Text(
+            '${percentage.toStringAsFixed(0)}%',
+            style: textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isTouched ? touchedColor : Colors.black.withOpacity(0.8),
+              fontSize: isTouched ? 11 : 10, // Kích thước chữ cho %
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
     final dataMap = appProvider.categoryBreakdown;
+    final textTheme = Theme.of(context).textTheme;
     const TextStyle defaultTextStyle = TextStyle();
 
     if (dataMap.isEmpty) {
       return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+        height: 180,
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade300, width: 0.8)
         ),
         child: Center(
-          child: Text(
-            'Chưa có dữ liệu chi tiêu để hiển thị biểu đồ.',
-            style: (Theme.of(context).textTheme.bodyLarge ?? defaultTextStyle.copyWith(fontSize: 16))
-                .copyWith(color: Colors.grey),
-            textAlign: TextAlign.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.sentiment_dissatisfied_outlined, size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'Không có chi tiêu tháng này',
+                style: (textTheme.titleSmall ?? defaultTextStyle.copyWith(fontSize: 15)).copyWith(color: Colors.grey[700], fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Hãy thêm giao dịch để xem phân bổ nhé!',
+                style: (textTheme.bodyMedium ?? defaultTextStyle.copyWith(fontSize: 13)).copyWith(color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       );
     }
 
-    final List<Color> colorList = [
-      Colors.pinkAccent.shade200,
-      Colors.orangeAccent.shade200,
-      Colors.amber.shade600,
-      Colors.lightGreen.shade400,
-      Colors.blueAccent.shade200,
-      Colors.purpleAccent.shade100,
-      Colors.tealAccent.shade200,
-      Colors.red.shade300,
-    ];
+    final double totalValue = dataMap.values.fold(0.0, (sum, item) => sum + item);
+
+    final sortedEntries = dataMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    List<PieChartSectionData> pieChartSections = [];
+    final List<Color> sectionColors = sortedEntries.map((entry) {
+      return CategoryHelper.getCategoryColor(entry.key, 'Chi tiêu');
+    }).toList();
+
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final categoryValue = entry.value;
+      final percentage = totalValue == 0 ? 0.0 : (categoryValue / totalValue) * 100;
+      final Color color = sectionColors[i];
+
+      final bool isTouched = i == _touchedIndex;
+      final double radius = isTouched ? 48.0 : 38.0; // Bán kính khi chạm và không chạm
+      final double titleFontSize = isTouched ? 10.0 : 8.0;
+      // titlePositionPercentageOffset > 1 để đưa ra ngoài.
+      // Giá trị càng lớn, nhãn càng xa tâm.
+      final double titlePosition = 1.2; // Đẩy nhãn ra xa hơn
+
+      pieChartSections.add(
+        PieChartSectionData(
+          color: color,
+          value: categoryValue,
+          title: '${percentage.toStringAsFixed(0)}%',
+          radius: radius,
+          titleStyle: TextStyle(
+            fontSize: titleFontSize,
+            fontWeight: FontWeight.bold,
+            color: Colors.black.withOpacity(0.8), // Màu chữ tối cho dễ đọc
+            shadows: const [Shadow(color: Colors.white70, blurRadius: 1)], // Bóng trắng nhẹ
+          ),
+          showTitle: percentage > 1.5, // Chỉ hiển thị nếu % > 1.5%
+          titlePositionPercentageOffset: titlePosition,
+        ),
+      );
+    }
+
+    const int maxLegendItems = 5;
+    List<MapEntry<String, double>> legendEntriesToShow = sortedEntries.take(maxLegendItems).toList();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.fromLTRB(12.0, 16.0, 12.0, 16.0), // Điều chỉnh padding
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color ?? Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: Theme.of(context).cardTheme.shadowColor != null ?
-        [BoxShadow(color: Theme.of(context).cardTheme.shadowColor!, blurRadius: 8, offset: const Offset(0,4))]
-            : [BoxShadow(color: Colors.grey.shade200, blurRadius: 8, offset: const Offset(0, 4))],
-      ),
-      child: PieChart(
-        dataMap: dataMap,
-        animationDuration: const Duration(milliseconds: 1000),
-        chartLegendSpacing: 48,
-        chartRadius: MediaQuery.of(context).size.width / 2.8,
-        colorList: colorList,
-        initialAngleInDegree: 0,
-        chartType: ChartType.ring,
-        ringStrokeWidth: 28,
-        centerText: "Chi Tiêu",
-        legendOptions: LegendOptions(
-          showLegendsInRow: false,
-          legendPosition: LegendPosition.right,
-          showLegends: true,
-          legendShape: BoxShape.circle,
-          legendTextStyle: (Theme.of(context).textTheme.bodySmall ?? defaultTextStyle.copyWith(fontSize: 13))
-              .copyWith(fontWeight: FontWeight.w500),
-        ),
-        chartValuesOptions: ChartValuesOptions(
-          showChartValueBackground: false,
-          showChartValues: true,
-          showChartValuesInPercentage: true,
-          showChartValuesOutside: false,
-          decimalPlaces: 1,
-          chartValueStyle: (Theme.of(context).textTheme.labelSmall ?? defaultTextStyle.copyWith(fontSize: 11))
-              .copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade200, // Shadow nhẹ hơn
+            blurRadius: 7,
+            offset: const Offset(0, 3), // Điều chỉnh offset
           ),
-        ),
-        gradientList: null,
-        emptyColorGradient: [Colors.grey.shade200],
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 5, // Tỷ lệ cho biểu đồ
+            child: AspectRatio(
+              aspectRatio: 0.9, // Điều chỉnh tỷ lệ để biểu đồ cao hơn một chút
+              child: PieChart(
+                PieChartData(
+                  pieTouchData: PieTouchData(
+                    touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                      setState(() {
+                        if (!event.isInterestedForInteractions ||
+                            pieTouchResponse == null ||
+                            pieTouchResponse.touchedSection == null) {
+                          _touchedIndex = -1;
+                          return;
+                        }
+                        _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                      });
+                    },
+                  ),
+                  borderData: FlBorderData(show: false),
+                  sectionsSpace: 1.5, // Khoảng cách giữa các lát cắt
+                  centerSpaceRadius: 40, // Lỗ ở giữa lớn hơn
+                  sections: pieChartSections,
+                  startDegreeOffset: -90,
+                ),
+                swapAnimationDuration: const Duration(milliseconds: 250),
+                swapAnimationCurve: Curves.easeOutCubic,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12), // Giảm khoảng cách
+          Expanded(
+            flex: 5, // Tỷ lệ cho chú giải
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center, // Căn giữa các mục chú giải
+              children: legendEntriesToShow.asMap().entries.map((indexedEntry) {
+                final index = indexedEntry.key;
+                final entry = indexedEntry.value;
+                final categoryName = entry.key;
+                final categoryValue = entry.value;
+                final percentage = totalValue == 0 ? 0.0 : (categoryValue / totalValue) * 100;
+
+                final categoryDetails = CategoryHelper.getCategoryDetails(categoryName, 'Chi tiêu');
+                final categoryColor = (index < sectionColors.length) ? sectionColors[index] : categoryDetails['color'] as Color;
+                final categoryIcon = categoryDetails['icon'] as IconData;
+
+                if (percentage > 0.1) {
+                  return _buildAdvancedLegendItem(
+                    context,
+                    color: categoryColor,
+                    categoryName: categoryName,
+                    categoryIcon: categoryIcon,
+                    percentage: percentage,
+                    isTouched: index == _touchedIndex,
+                  );
+                } else {
+                  return const SizedBox.shrink();
+                }
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
