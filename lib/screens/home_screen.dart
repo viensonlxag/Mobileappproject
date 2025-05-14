@@ -1,10 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:pie_chart/pie_chart.dart'; // Đảm bảo bạn đã thêm dependency này
+import 'package:pie_chart/pie_chart.dart';
 
-import '../providers/app_provider.dart'; // Giả định AppProvider tồn tại
-import '../routes.dart'; // Giả định Routes tồn tại
-import '../screens/history_screen.dart'; // Giả định HistoryScreen tồn tại
+import '../providers/app_provider.dart';
+import '../routes.dart';
+import '../screens/history_screen.dart';
+import '../screens/settings_screen.dart';
+
+// Widget mới cho logo chữ "S" cách điệu
+class _StylizedSLogo extends StatelessWidget {
+  final Color backgroundColor;
+  final Color textColor;
+  final double circleSize;
+  final double letterSize;
+
+  const _StylizedSLogo({
+    this.backgroundColor = Colors.white,
+    this.textColor = Colors.pinkAccent,
+    this.circleSize = 32.0,
+    this.letterSize = 20.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String? logoFontFamily = Theme.of(context).textTheme.headlineSmall?.fontFamily;
+
+    return Container(
+      width: circleSize,
+      height: circleSize,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 3.0,
+            offset: const Offset(1.0, 2.0),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          'S',
+          style: TextStyle(
+            fontFamily: logoFontFamily,
+            fontSize: letterSize,
+            fontWeight: FontWeight.w900,
+            color: textColor,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,18 +65,18 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  // Danh sách các màn hình cho BottomNavigationBar
   static final List<Widget> _widgetOptions = <Widget>[
-    const _HomeContent(), // Nội dung chính của tab Trang chủ
-    const HistoryScreen(), // Màn hình Lịch sử giao dịch
-    Container(), // Mục "Ghi chép GD" không hiển thị view riêng, chỉ điều hướng
-    const PlaceholderWidget(screenName: 'Ngân sách'), // Màn hình Ngân sách (Placeholder)
-    const PlaceholderWidget(screenName: 'Tiện ích'), // Màn hình Tiện ích (Placeholder)
+    const _HomeContent(),
+    const HistoryScreen(),
+    Container(), // Placeholder cho tab Ghi chép (chỉ điều hướng)
+    const PlaceholderWidget(screenName: 'Ngân sách'),
+    const SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
-    if (index == 2) { // Mục "Ghi chép GD"
+    if (index == 2) {
       Navigator.pushNamed(context, Routes.addTransaction);
+      // Không setState để không chuyển tab khi chỉ điều hướng
     } else {
       setState(() {
         _selectedIndex = index;
@@ -35,79 +84,129 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Hàm xử lý khi nhấn nút back vật lý hoặc cử chỉ back
+  Future<bool> _onWillPop() async {
+    if (_selectedIndex != 0) {
+      // Nếu không ở tab Tổng quan (index 0), chuyển về tab Tổng quan
+      setState(() {
+        _selectedIndex = 0;
+      });
+      return false; // Ngăn không cho pop route hiện tại (HomeScreen)
+    }
+    // Nếu đang ở tab Tổng quan, cho phép hành vi pop mặc định (ví dụ: thoát app nếu đây là route cuối)
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _selectedIndex == 0 // Chỉ hiển thị AppBar cho tab Trang chủ
-          ? AppBar(
-        backgroundColor: Colors.pinkAccent,
-        title: const Text(
-          'Quản Lý Chi Tiêu',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        elevation: 0, // Loại bỏ shadow mặc định của AppBar
-      )
-          : null,
-      body: IndexedStack( // Sử dụng IndexedStack để giữ trạng thái các tab
-        index: _selectedIndex,
-        children: _widgetOptions,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: Colors.pinkAccent,
-        unselectedItemColor: Colors.grey[600],
-        type: BottomNavigationBarType.fixed, // Giữ các mục cố định
-        backgroundColor: Colors.white,
-        elevation: 8.0, // Thêm chút đổ bóng cho BottomNavigationBar
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home_rounded),
-            label: 'Tổng quan',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.article_outlined),
-            activeIcon: Icon(Icons.article_rounded),
-            label: 'Sổ GD',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.pinkAccent,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.pinkAccent.withAlpha((255 * 0.5).round()), // Sửa lỗi deprecated withOpacity
-                      spreadRadius: 1,
-                      blurRadius: 5,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+    final appBarTheme = Theme.of(context).appBarTheme;
+    final Color appBarForegroundColor = appBarTheme.foregroundColor ?? Colors.white;
+    final String? titleFontFamily = appBarTheme.titleTextStyle?.fontFamily ?? Theme.of(context).textTheme.titleLarge?.fontFamily;
+
+    // Bọc Scaffold bằng WillPopScope
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        appBar: _selectedIndex == 0
+            ? AppBar(
+          backgroundColor: appBarTheme.backgroundColor,
+          foregroundColor: appBarForegroundColor,
+          automaticallyImplyLeading: false, // Không tự thêm nút back ở đây
+          elevation: appBarTheme.elevation,
+          title: Row(
+            children: [
+              _StylizedSLogo(
+                backgroundColor: Colors.white,
+                textColor: Theme.of(context).colorScheme.primary,
+                circleSize: 30,
+                letterSize: 18,
               ),
+              const SizedBox(width: 10),
+              Text(
+                'Budget',
+                style: TextStyle(
+                  fontFamily: titleFontFamily,
+                  color: appBarForegroundColor,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(Icons.notifications_none_rounded, color: appBarForegroundColor.withOpacity(0.9)),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Tính năng thông báo sắp ra mắt!')),
+                );
+              },
             ),
-            label: 'Ghi chép',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet_rounded),
-            label: 'Ngân sách',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.widgets_outlined),
-            activeIcon: Icon(Icons.widgets_rounded),
-            label: 'Tiện ích',
-          ),
-        ],
+            const SizedBox(width: 8),
+          ],
+        )
+            : null, // Các tab khác (Sổ GD, Ngân sách, Cài đặt) sẽ có AppBar riêng nếu cần
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: _widgetOptions,
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
+          type: BottomNavigationBarType.fixed,
+          items: [
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home_rounded),
+              label: 'Tổng quan',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.article_outlined),
+              activeIcon: Icon(Icons.article_rounded),
+              label: 'Sổ GD',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.pinkAccent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pinkAccent.withAlpha((255 * 0.5).round()),
+                        spreadRadius: 1,
+                        blurRadius: 5,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+                ),
+              ),
+              label: 'Ghi chép',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              activeIcon: Icon(Icons.account_balance_wallet_rounded),
+              label: 'Ngân sách',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined),
+              activeIcon: Icon(Icons.settings_rounded),
+              label: 'Cài đặt',
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+// ... (Các widget _HomeContent, _SectionTitle, _WelcomeBanner, etc. giữ nguyên) ...
+// Đảm bảo các widget này không có logic điều hướng back riêng gây xung đột.
 
 class PlaceholderWidget extends StatelessWidget {
   final String screenName;
@@ -116,10 +215,7 @@ class PlaceholderWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        '$screenName Screen',
-        style: const TextStyle(fontSize: 24, color: Colors.grey),
-      ),
+      child: Text(screenName, style: Theme.of(context).textTheme.bodyLarge ?? const TextStyle()),
     );
   }
 }
@@ -166,11 +262,8 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Text(
         title,
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: Colors.grey[800],
-        ),
+        style: (Theme.of(context).textTheme.headlineSmall ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
+            .copyWith(color: Colors.grey[800]),
       ),
     );
   }
@@ -181,6 +274,9 @@ class _WelcomeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final userName = Provider.of<AppProvider>(context).userName;
+    const TextStyle defaultTextStyle = TextStyle();
+
     return Container(
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -190,27 +286,50 @@ class _WelcomeBanner extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.pinkAccent.withAlpha((255 * 0.3).round()), // Sửa lỗi deprecated withOpacity
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            color: Colors.pinkAccent.withAlpha((255 * 0.2).round()),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.emoji_emotions_outlined, color: Colors.white, size: 40),
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: Colors.white.withOpacity(0.3),
+            child: Text(
+              userName.isNotEmpty && userName != "Bạn" ? userName[0].toUpperCase() : "?",
+              style: (Theme.of(context).textTheme.headlineMedium ?? defaultTextStyle.copyWith(fontSize: 28))
+                  .copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              'Chào mừng bạn trở lại!\nTheo dõi chi tiêu thật dễ dàng.',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: (Theme.of(context).textTheme.titleMedium ?? defaultTextStyle.copyWith(fontSize: 18))
+                        .copyWith(color: Colors.white),
+                    children: <TextSpan>[
+                      const TextSpan(text: 'Chào mừng, ', style: TextStyle(fontWeight: FontWeight.w300)),
+                      TextSpan(
+                          text: '$userName!',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Quản lý tài chính thông minh hơn mỗi ngày.',
+                  style: (Theme.of(context).textTheme.bodyMedium ?? defaultTextStyle.copyWith(fontSize: 14))
+                      .copyWith(color: Colors.white70),
+                ),
+              ],
             ),
           ),
         ],
@@ -233,26 +352,36 @@ class _QuickActionsSection extends StatelessWidget {
           _QuickActionItem(
             icon: Icons.category_outlined,
             label: 'Phân loại',
-            route: Routes.settings,
-            color: Colors.orangeAccent, // Đây là MaterialAccentColor
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Tính năng Phân loại sắp ra mắt!')),
+              );
+            },
+            color: Colors.orangeAccent,
           ),
           _QuickActionItem(
             icon: Icons.add_card_outlined,
             label: 'Ghi chép',
-            route: Routes.addTransaction,
-            color: Colors.greenAccent, // Sửa: truyền MaterialAccentColor, shade700 sẽ được lấy trong _QuickActionItem
+            onTap: () {
+              Navigator.pushNamed(context, Routes.addTransaction);
+            },
+            color: Colors.greenAccent.shade700,
           ),
           _QuickActionItem(
-            icon: Icons.calendar_today_outlined,
-            label: 'Tháng này',
-            route: Routes.history,
-            color: Colors.blueAccent, // Đây là MaterialAccentColor
+            icon: Icons.history_edu_outlined,
+            label: 'Lịch sử GD',
+            onTap: () {
+              Navigator.pushNamed(context, Routes.history);
+            },
+            color: Colors.blueAccent,
           ),
           _QuickActionItem(
-            icon: Icons.settings_outlined,
+            icon: Icons.settings_applications_rounded,
             label: 'Cài đặt',
-            route: Routes.settings,
-            color: Colors.purpleAccent, // Đây là MaterialAccentColor
+            onTap: () {
+              Navigator.pushNamed(context, Routes.settings);
+            },
+            color: Colors.purpleAccent,
           ),
         ],
       ),
@@ -261,44 +390,48 @@ class _QuickActionsSection extends StatelessWidget {
 }
 
 class _QuickActionItem extends StatelessWidget {
-  final MaterialAccentColor color; // Đảm bảo color là MaterialAccentColor để có shade700
+  final Color color;
   final IconData icon;
   final String label;
-  final String route;
+  final VoidCallback onTap;
 
   const _QuickActionItem({
-    super.key, // Thêm super.key
+    super.key,
     required this.icon,
     required this.label,
-    required this.route,
+    required this.onTap,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
+    final Color effectiveIconAndTextColor = (color is MaterialAccentColor) ? (color as MaterialAccentColor).shade700 : color;
+    final Color effectiveBackgroundColor = (color is MaterialAccentColor) ? color.withAlpha((255 * 0.1).round()) : color.withOpacity(0.1);
+    const TextStyle defaultTextStyle = TextStyle();
+
     return InkWell(
-      onTap: () => Navigator.pushNamed(context, route),
+      onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 90,
         margin: const EdgeInsets.symmetric(horizontal: 4.0),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withAlpha((255 * 0.1).round()), // Sửa lỗi deprecated withOpacity
-          borderRadius: BorderRadius.circular(12),
+            color: effectiveBackgroundColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: effectiveIconAndTextColor.withOpacity(0.3), width: 1)
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 30),
+            Icon(icon, color: effectiveIconAndTextColor, size: 30),
             const SizedBox(height: 8),
             Text(
               label,
-              // Sửa lỗi: color.shade700 giờ đây hợp lệ vì color là MaterialAccentColor
-              // Bỏ const vì color.shade700 không phải là hằng số biên dịch
-              style: TextStyle(fontSize: 12, color: color.shade700, fontWeight: FontWeight.w500),
+              style: (Theme.of(context).textTheme.bodySmall ?? defaultTextStyle.copyWith(fontSize: 12))
+                  .copyWith(color: effectiveIconAndTextColor, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -314,20 +447,17 @@ class _OverviewSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
+    const TextStyle defaultTextStyle = TextStyle();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardTheme.color ?? Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade300,
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        boxShadow: Theme.of(context).cardTheme.shadowColor != null ?
+        [BoxShadow(color: Theme.of(context).cardTheme.shadowColor!, blurRadius: 10, offset: const Offset(0,5))]
+            : [BoxShadow(color: Colors.grey.shade300, blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,12 +485,12 @@ class _OverviewSection extends StatelessWidget {
           Center(
             child: Text(
               appProvider.expenseCompareText,
-              style: TextStyle(
+              style: (Theme.of(context).textTheme.bodyMedium ?? defaultTextStyle.copyWith(fontSize: 15))
+                  .copyWith(
                 color: appProvider.totalExpense > appProvider.totalIncome
                     ? Colors.redAccent
                     : Colors.green,
                 fontWeight: FontWeight.w600,
-                fontSize: 15,
               ),
               textAlign: TextAlign.center,
             ),
@@ -386,6 +516,7 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const TextStyle defaultTextStyle = TextStyle();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -396,15 +527,16 @@ class _InfoCard extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               title,
-              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              style: (Theme.of(context).textTheme.bodySmall ?? defaultTextStyle.copyWith(fontSize: 14))
+                  .copyWith(color: Colors.grey[700]),
             ),
           ],
         ),
         const SizedBox(height: 6),
         Text(
           amount,
-          style: TextStyle(
-            fontSize: 20,
+          style: (Theme.of(context).textTheme.titleMedium ?? defaultTextStyle.copyWith(fontSize: 20))
+              .copyWith(
             fontWeight: FontWeight.bold,
             color: Colors.grey[900],
           ),
@@ -421,6 +553,7 @@ class _CategoryPieChartSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
     final dataMap = appProvider.categoryBreakdown;
+    const TextStyle defaultTextStyle = TextStyle();
 
     if (dataMap.isEmpty) {
       return Container(
@@ -430,10 +563,11 @@ class _CategoryPieChartSection extends StatelessWidget {
           color: Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             'Chưa có dữ liệu chi tiêu để hiển thị biểu đồ.',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+            style: (Theme.of(context).textTheme.bodyLarge ?? defaultTextStyle.copyWith(fontSize: 16))
+                .copyWith(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
         ),
@@ -455,15 +589,11 @@ class _CategoryPieChartSection extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardTheme.color ?? Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: Theme.of(context).cardTheme.shadowColor != null ?
+        [BoxShadow(color: Theme.of(context).cardTheme.shadowColor!, blurRadius: 8, offset: const Offset(0,4))]
+            : [BoxShadow(color: Colors.grey.shade200, blurRadius: 8, offset: const Offset(0, 4))],
       ),
       child: PieChart(
         dataMap: dataMap,
@@ -475,24 +605,22 @@ class _CategoryPieChartSection extends StatelessWidget {
         chartType: ChartType.ring,
         ringStrokeWidth: 28,
         centerText: "Chi Tiêu",
-        legendOptions: const LegendOptions(
+        legendOptions: LegendOptions(
           showLegendsInRow: false,
           legendPosition: LegendPosition.right,
           showLegends: true,
           legendShape: BoxShape.circle,
-          legendTextStyle: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+          legendTextStyle: (Theme.of(context).textTheme.bodySmall ?? defaultTextStyle.copyWith(fontSize: 13))
+              .copyWith(fontWeight: FontWeight.w500),
         ),
-        chartValuesOptions: const ChartValuesOptions(
+        chartValuesOptions: ChartValuesOptions(
           showChartValueBackground: false,
           showChartValues: true,
           showChartValuesInPercentage: true,
           showChartValuesOutside: false,
           decimalPlaces: 1,
-          chartValueStyle: TextStyle(
-            fontSize: 11,
+          chartValueStyle: (Theme.of(context).textTheme.labelSmall ?? defaultTextStyle.copyWith(fontSize: 11))
+              .copyWith(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/add_transaction_screen.dart';
-import 'screens/history_screen.dart';
-import 'screens/settings_screen.dart';
+import '../screens/login_screen.dart'; // Đảm bảo đường dẫn đúng
+import '../screens/home_screen.dart';   // Đảm bảo đường dẫn đúng
+import '../screens/add_transaction_screen.dart'; // Đảm bảo đường dẫn đúng
+import '../screens/history_screen.dart'; // Đảm bảo đường dẫn đúng
+import '../screens/settings_screen.dart'; // Đảm bảo đường dẫn đúng
+import '../screens/user_profile_screen.dart'; // <-- THÊM IMPORT NÀY (tạo file này ở bước sau)
 
 class Routes {
   static const String login = '/login';
@@ -11,24 +12,26 @@ class Routes {
   static const String addTransaction = '/add-transaction';
   static const String history = '/history';
   static const String settings = '/settings';
+  static const String userProfile = '/user-profile'; // <-- THÊM ROUTE MỚI
 
-  /// Route generator chuẩn hóa (dùng const String cho case match)
-  static Route<dynamic> generateRoute(RouteSettings settings) {
-    switch (settings.name) {
-      case Routes.login: // ✅ Sửa đây
+  static Route<dynamic> generateRoute(RouteSettings routeSettings) { // Đổi tên settings thành routeSettings
+    switch (routeSettings.name) {
+      case Routes.login:
         return MaterialPageRoute(builder: (_) => const LoginScreen());
-      case Routes.home: // ✅ Sửa đây
+      case Routes.home:
         return MaterialPageRoute(builder: (_) => const HomeScreen());
-      case Routes.addTransaction: // ✅ Sửa đây
+      case Routes.addTransaction:
         return MaterialPageRoute(builder: (_) => const AddTransactionScreen());
-      case Routes.history: // ✅ Sửa đây
+      case Routes.history:
         return MaterialPageRoute(builder: (_) => const HistoryScreen());
-      case Routes.settings: // ✅ Sửa đây
+      case Routes.settings:
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
+      case Routes.userProfile: // <-- THÊM CASE CHO USER PROFILE
+        return MaterialPageRoute(builder: (_) => const UserProfileScreen());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
-            body: Center(child: Text('No route defined for ${settings.name}')),
+            body: Center(child: Text('Không tìm thấy đường dẫn: ${routeSettings.name}')),
           ),
         );
     }
