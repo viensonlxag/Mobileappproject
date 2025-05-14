@@ -37,8 +37,11 @@ dependencies:
   # Shared Preferences
   shared_preferences: ^2.2.3
 
-  # ✅ Google Fonts đã thêm
+  # Google Fonts
   google_fonts: ^6.1.0
+
+  # ✅ Collection đã thêm
+  collection: ^1.18.0
 
 dev_dependencies:
   flutter_test:

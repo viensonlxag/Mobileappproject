@@ -3,9 +3,12 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/expense_transaction.dart';
 import '../providers/app_provider.dart';
+import '../routes.dart'; // Import Routes để có thể điều hướng về home sau khi xóa
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  final ExpenseTransaction? existingTransaction;
+
+  const AddTransactionScreen({super.key, this.existingTransaction});
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -14,16 +17,17 @@ class AddTransactionScreen extends StatefulWidget {
 class _AddTransactionScreenState extends State<AddTransactionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _type = 'Chi tiêu'; // Mặc định là 'Chi tiêu'
+  String _type = 'Chi tiêu';
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   String? _selectedCategory;
   DateTime _selectedDate = DateTime.now();
-  List<String> _selectedSources = ['Tiền mặt']; // Mặc định chọn 'Tiền mặt'
+  String? _selectedSource = 'Tiền mặt';
 
-  // Danh sách các danh mục được cải thiện với màu sắc nhất quán hơn
-  // Bạn có thể mở rộng danh sách này hoặc lấy từ provider/database
-  final List<Map<String, dynamic>> _categories = [
+  bool _isEditing = false;
+  String? _editingTransactionId;
+
+  final List<Map<String, dynamic>> _expenseCategories = [
     {'label': 'Ăn uống', 'icon': Icons.restaurant_menu_rounded, 'color': Colors.orange.shade700},
     {'label': 'Di chuyển', 'icon': Icons.directions_car_rounded, 'color': Colors.blue.shade700},
     {'label': 'Mua sắm', 'icon': Icons.shopping_bag_rounded, 'color': Colors.purple.shade700},
@@ -42,18 +46,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     {'label': 'Thu nhập khác', 'icon': Icons.attach_money_rounded, 'color': Colors.amber.shade700},
   ];
 
-
   final List<String> _allSources = ['Tiền mặt', 'Tài khoản ngân hàng', 'Ví Momo', 'Ví ZaloPay', 'Thẻ tín dụng'];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() { // Reset form khi chuyển tab (tùy chọn)
-      if (!_tabController.indexIsChanging) {
-        // Nếu bạn muốn reset form khi chuyển tab, hãy thêm logic ở đây
-      }
-    });
+
+    if (widget.existingTransaction != null) {
+      _isEditing = true;
+      final tx = widget.existingTransaction!;
+      _editingTransactionId = tx.id;
+      _type = tx.type;
+      _amountController.text = tx.amount.abs().toStringAsFixed(0);
+      _noteController.text = tx.note ?? '';
+      _selectedCategory = tx.category;
+      _selectedDate = tx.date;
+      _selectedSource = tx.sources.isNotEmpty ? tx.sources.first : 'Tiền mặt';
+    }
   }
 
   @override
@@ -66,9 +76,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
 
   bool get _isFormValid =>
       _amountController.text.isNotEmpty &&
-          double.tryParse(_amountController.text) != null && // Kiểm tra số tiền hợp lệ
+          double.tryParse(_amountController.text) != null &&
           _selectedCategory != null &&
-          _selectedSources.isNotEmpty;
+          _selectedSource != null;
 
   Future<void> _submitData() async {
     if (!_isFormValid) {
@@ -82,56 +92,126 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     }
 
     final amount = double.parse(_amountController.text);
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
 
-    final newTransaction = ExpenseTransaction(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: _selectedCategory!, // Hoặc có thể dùng _noteController.text nếu muốn tiêu đề chi tiết hơn
+    final transactionData = ExpenseTransaction(
+      id: _isEditing ? _editingTransactionId! : DateTime.now().millisecondsSinceEpoch.toString(),
+      title: _selectedCategory!,
       amount: _type == 'Chi tiêu' ? -amount : amount,
       date: _selectedDate,
       type: _type,
       category: _selectedCategory!,
       note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
-      sources: _selectedSources,
+      sources: _selectedSource != null ? [_selectedSource!] : [],
     );
 
     try {
-      await Provider.of<AppProvider>(context, listen: false)
-          .addTransaction(newTransaction);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đã ${_type == 'Chi tiêu' ? 'thêm chi tiêu' : 'thêm thu nhập'} thành công!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.of(context).pop();
+      if (_isEditing) {
+        await appProvider.updateTransaction(transactionData);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã cập nhật giao dịch thành công!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        await appProvider.addTransaction(transactionData);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã ${_type == 'Chi tiêu' ? 'thêm chi tiêu' : 'thêm thu nhập'} thành công!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      Navigator.of(context).pop(); // Quay lại màn hình trước đó (HistoryScreen)
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lỗi khi thêm giao dịch: $error'),
+          content: Text('Lỗi: ${error.toString()}'),
           backgroundColor: Colors.redAccent,
         ),
       );
     }
   }
 
+  // --- CHỨC NĂNG XÓA GIAO DỊCH ---
+  Future<void> _confirmDeleteTransaction() async {
+    if (!_isEditing || _editingTransactionId == null) return;
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Xác nhận Xóa'),
+          content: const Text('Bạn có chắc chắn muốn xóa giao dịch này không? Hành động này không thể hoàn tác.'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Hủy'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false); // Trả về false
+              },
+            ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+              child: const Text('Xóa'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true); // Trả về true
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      try {
+        await Provider.of<AppProvider>(context, listen: false).deleteTransaction(_editingTransactionId!);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã xóa giao dịch thành công!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Pop 2 lần: 1 lần để đóng màn hình AddTransactionScreen,
+        // 1 lần nữa nếu HistoryScreen là màn hình trước đó (hoặc điều hướng về home)
+        // Để đơn giản, chúng ta sẽ pop 1 lần, HistoryScreen sẽ tự cập nhật
+        Navigator.of(context).pop();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi khi xóa giao dịch: ${error.toString()}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+  // --- KẾT THÚC CHỨC NĂNG XÓA ---
+
+
   Future<void> _pickDate() async {
+    // Nội dung hàm này giữ nguyên
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)), // Cho phép chọn ngày trong tương lai (nếu cần)
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
       helpText: 'CHỌN NGÀY GIAO DỊCH',
       cancelText: 'HỦY',
       confirmText: 'CHỌN',
+      locale: const Locale('vi', 'VN'),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Colors.pinkAccent, // Màu chính của DatePicker
+              primary: Colors.pinkAccent,
               onPrimary: Colors.white,
             ),
             dialogBackgroundColor: Colors.white,
@@ -148,36 +228,35 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   }
 
   void _showSourceSelector() {
+    // Nội dung hàm này giữ nguyên
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Cho phép nội dung dài hơn
-      backgroundColor: Colors.transparent, // Nền trong suốt để thấy bo góc của Container bên trong
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        // Sử dụng StatefulBuilder để quản lý trạng thái riêng của bottom sheet
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter modalSetState) {
             return Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
               decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).canvasColor,
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(20),
                     topRight: Radius.circular(20),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.3),
-                      spreadRadius: 2,
-                      blurRadius: 10,
+                      color: Colors.grey.withOpacity(0.2),
+                      spreadRadius: 1,
+                      blurRadius: 5,
                     )
-                  ]
-              ),
+                  ]),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Center(
-                    child: Container( // Thanh kéo nhỏ ở trên cùng
+                    child: Container(
                       width: 40,
                       height: 5,
                       margin: const EdgeInsets.only(bottom: 15),
@@ -187,59 +266,34 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                       ),
                     ),
                   ),
-                  const Text(
-                    'Chọn nguồn tiền',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.pinkAccent),
-                  ),
-                  const SizedBox(height: 15),
-                  Flexible( // Cho phép ListView cuộn nếu nhiều item
-                    child: ListView.builder(
-                      shrinkWrap: true, // Quan trọng khi trong Column MainAxisSize.min
-                      itemCount: _allSources.length,
-                      itemBuilder: (context, index) {
-                        final source = _allSources[index];
-                        final isSelected = _selectedSources.contains(source);
-                        return CheckboxListTile(
-                          title: Text(source, style: TextStyle(color: Colors.grey[800])),
-                          value: isSelected,
-                          onChanged: (bool? value) {
-                            modalSetState(() { // Cập nhật trạng thái của bottom sheet
-                              if (value == true) {
-                                if (!_selectedSources.contains(source)) {
-                                  _selectedSources.add(source);
-                                }
-                              } else {
-                                _selectedSources.remove(source);
-                              }
-                            });
-                            // Cập nhật trạng thái của màn hình chính
-                            // Điều này cần thiết nếu bạn muốn UI chính phản ánh ngay lập tức
-                            // mà không cần đóng bottom sheet.
-                            // Tuy nhiên, thường thì chỉ cần cập nhật khi bottom sheet đóng.
-                            setState(() {});
-                          },
-                          activeColor: Colors.pinkAccent,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        );
-                      },
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                    child: Text(
+                      'Chọn nguồn tiền',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.pinkAccent,
-                        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 12),
-                        textStyle: const TextStyle(fontSize: 16, color: Colors.white),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Xong', style: TextStyle(color: Colors.white)),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
+                  const SizedBox(height: 10),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _allSources.length,
+                    itemBuilder: (context, index) {
+                      final source = _allSources[index];
+                      return RadioListTile<String>(
+                        title: Text(source, style: Theme.of(context).textTheme.bodyLarge),
+                        value: source,
+                        groupValue: _selectedSource,
+                        onChanged: (String? value) {
+                          modalSetState(() {
+                            _selectedSource = value;
+                          });
+                          setState(() {});
+                          Navigator.of(ctx).pop();
+                        },
+                        activeColor: Theme.of(context).colorScheme.primary,
+                        controlAffinity: ListTileControlAffinity.trailing,
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -251,25 +305,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final isExpense = _type == 'Chi tiêu';
-    final currentCategories = isExpense ? _categories : _incomeCategories;
+    final currentCategories = isExpense ? _expenseCategories : _incomeCategories;
+    final appBarTitle = _isEditing ? 'Sửa Giao Dịch' : 'Ghi Chép Giao Dịch';
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Màu nền nhẹ nhàng
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Ghi Chép Giao Dịch', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.pinkAccent,
-        elevation: 0, // Đồng bộ với HomeScreen
-        iconTheme: const IconThemeData(color: Colors.white), // Màu icon back
-        bottom: TabBar(
+        title: Text(appBarTitle),
+        // Thêm nút xóa vào AppBar khi ở chế độ sửa
+        actions: _isEditing
+            ? [
+          IconButton(
+            icon: Icon(Icons.delete_outline_rounded, color: Theme.of(context).appBarTheme.foregroundColor ?? Colors.white),
+            tooltip: 'Xóa giao dịch',
+            onPressed: _confirmDeleteTransaction,
+          ),
+        ]
+            : null,
+        bottom: _isEditing ? null : TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white, // Màu của thanh trượt dưới tab
-          indicatorWeight: 3.0,
-          labelColor: Colors.white, // Màu chữ của tab được chọn
-          unselectedLabelColor: Colors.pink.shade100, // Màu chữ của tab không được chọn
           tabs: const [
             Tab(
               child: Row(
@@ -294,17 +351,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
           ],
         ),
       ),
-      body: TabBarView(
+      body: _isEditing
+          ? _buildManualEntryForm(isExpense, currentCategories)
+          : TabBarView(
         controller: _tabController,
         children: [
           _buildManualEntryForm(isExpense, currentCategories),
-          _buildScanImagePlaceholder(), // Placeholder cho tính năng quét ảnh
+          _buildScanImagePlaceholder(),
         ],
       ),
     );
   }
 
   Widget _buildScanImagePlaceholder() {
+    // Nội dung giữ nguyên
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -316,13 +376,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
             Text(
               'Tính năng quét hóa đơn từ ảnh',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey[700]),
             ),
             const SizedBox(height: 10),
             Text(
               'Sắp ra mắt! Giúp bạn ghi chép nhanh hơn.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
             ),
           ],
         ),
@@ -331,27 +391,30 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   }
 
   Widget _buildManualEntryForm(bool isExpense, List<Map<String, dynamic>> currentCategories) {
-    return GestureDetector( // Để ẩn bàn phím khi chạm ra ngoài
+    final buttonLabel = _isEditing
+        ? (_type == 'Chi tiêu' ? 'CẬP NHẬT CHI TIÊU' : 'CẬP NHẬT THU NHẬP')
+        : (_type == 'Chi tiêu' ? 'LƯU CHI TIÊU' : 'LƯU THU NHẬP');
+
+    return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // --- Toggle Buttons cho Loại Giao Dịch ---
             Center(
               child: ToggleButtons(
                 isSelected: [isExpense, !isExpense],
                 onPressed: (int index) {
                   setState(() {
                     _type = index == 0 ? 'Chi tiêu' : 'Thu nhập';
-                    _selectedCategory = null; // Reset category khi đổi type
+                    _selectedCategory = null;
                   });
                 },
                 borderRadius: BorderRadius.circular(12.0),
                 selectedColor: Colors.white,
-                fillColor: Colors.pinkAccent,
-                color: Colors.pinkAccent.shade200,
+                fillColor: Theme.of(context).colorScheme.primary,
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
                 constraints: const BoxConstraints(minHeight: 40.0, minWidth: 120.0),
                 children: const <Widget>[
                   Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('CHI TIÊU', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -360,8 +423,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               ),
             ),
             const SizedBox(height: 24),
-
-            // --- Input Số Tiền ---
             _buildTextField(
               controller: _amountController,
               labelText: 'Số tiền',
@@ -370,60 +431,52 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 20),
-
-            // --- Chọn Danh Mục ---
-            Text('Chọn Danh Mục', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+            Text('Chọn Danh Mục', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10.0,
               runSpacing: 10.0,
               children: currentCategories.map((category) {
                 final bool isSelected = _selectedCategory == category['label'];
+                final Color catColor = category['color'] as Color;
                 return ChoiceChip(
                   label: Text(category['label']),
-                  avatar: Icon(category['icon'], size: 18, color: isSelected ? Colors.white : category['color']),
+                  avatar: Icon(category['icon'], size: 18, color: isSelected ? Colors.white : catColor),
                   selected: isSelected,
                   onSelected: (bool selected) {
                     setState(() {
                       _selectedCategory = selected ? category['label'] as String : null;
                     });
                   },
-                  backgroundColor: Colors.white,
-                  selectedColor: category['color'] as Color,
+                  backgroundColor: Theme.of(context).chipTheme.backgroundColor ?? Colors.grey.shade100,
+                  selectedColor: catColor,
                   labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : category['color'] as Color,
+                    color: isSelected ? Colors.white : catColor,
                     fontWeight: FontWeight.w500,
                   ),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(color: isSelected ? category['color'] as Color : Colors.grey.shade300, width: 1.5)
-                  ),
+                      side: BorderSide(color: isSelected ? catColor : Colors.grey.shade300, width: 1.5)),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 );
               }).toList(),
             ),
             const SizedBox(height: 24),
-
-            // --- Chọn Ngày Giao Dịch ---
             _buildListTile(
               icon: Icons.calendar_today_rounded,
               title: 'Ngày giao dịch',
-              subtitle: DateFormat('dd/MM/yyyy (EEEE)', 'vi_VN').format(_selectedDate), // Thêm thứ trong tuần
+              subtitle: DateFormat('dd/MM/yyyy (EEEE)', 'vi_VN').format(_selectedDate),
               onTap: _pickDate,
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
-
-            // --- Chọn Nguồn Tiền ---
             _buildListTile(
               icon: Icons.account_balance_wallet_outlined,
               title: 'Nguồn tiền',
-              subtitle: _selectedSources.isEmpty ? 'Chưa chọn' : _selectedSources.join(', '),
+              subtitle: _selectedSource ?? 'Chưa chọn',
               onTap: _showSourceSelector,
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
             const SizedBox(height: 20),
-
-            // --- Input Ghi Chú ---
             _buildTextField(
               controller: _noteController,
               labelText: 'Ghi chú (tùy chọn)',
@@ -432,32 +485,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               maxLines: 3,
             ),
             const SizedBox(height: 30),
-
-            // --- Nút Lưu ---
             Center(
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.save_rounded, color: Colors.white),
-                label: Text(
-                  _type == 'Chi tiêu' ? 'LƯU CHI TIÊU' : 'LƯU THU NHẬP',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                icon: Icon(_isEditing ? Icons.edit_note_rounded : Icons.save_rounded, color: Colors.white),
+                label: Text(buttonLabel),
                 onPressed: _isFormValid ? _submitData : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pinkAccent,
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.pinkAccent.withAlpha(100),
-                ),
               ),
             ),
-            const SizedBox(height: 20), // Thêm khoảng trống ở cuối
+            const SizedBox(height: 20), // Khoảng trống ở cuối
           ],
         ),
       ),
     );
   }
 
-  // Helper widget để tạo TextField đồng nhất
   Widget _buildTextField({
     required TextEditingController controller,
     required String labelText,
@@ -470,41 +511,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      style: TextStyle(color: Colors.grey[800], fontSize: 16),
+      style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[800]),
       decoration: InputDecoration(
         labelText: labelText,
         hintText: hintText,
-        labelStyle: const TextStyle(color: Colors.pinkAccent),
-        hintStyle: TextStyle(color: Colors.grey[400]),
-        prefixIcon: Icon(icon, color: Colors.pinkAccent.shade200),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: const BorderSide(color: Colors.pinkAccent, width: 2.0),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        prefixIcon: Icon(icon),
       ),
     );
   }
 
-  // Helper widget để tạo ListTile đồng nhất
   Widget _buildListTile({
     required IconData icon,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Material( // Thêm Material để có hiệu ứng ripple
-      color: Colors.white,
+    return Material(
+      color: Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -513,19 +536,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200, width: 1)
-          ),
+              border: Border.all(color: Colors.grey.shade200, width: 1)),
           child: Row(
             children: [
-              Icon(icon, color: Colors.pinkAccent, size: 26),
+              Icon(icon, size: 26),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: TextStyle(fontSize: 16, color: Colors.grey[800], fontWeight: FontWeight.w500)),
+                    Text(title),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                    Text(subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600])),
                   ],
                 ),
               ),

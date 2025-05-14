@@ -1,36 +1,47 @@
 import 'package:flutter/material.dart';
-import '../screens/login_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/home_screen.dart';   // Đảm bảo đường dẫn đúng
-import '../screens/add_transaction_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/history_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/settings_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/user_profile_screen.dart'; // <-- THÊM IMPORT NÀY (tạo file này ở bước sau)
+import '../screens/login_screen.dart'; // Đảm bảo đường dẫn này đúng
+import '../screens/home_screen.dart';   // Đảm bảo đường dẫn này đúng
+import '../screens/add_transaction_screen.dart'; // Đảm bảo đường dẫn này đúng
+import '../screens/history_screen.dart'; // Đảm bảo đường dẫn này đúng
+import '../screens/settings_screen.dart'; // Đảm bảo đường dẫn này đúng
+import '../screens/user_profile_screen.dart'; // Đảm bảo đường dẫn này đúng
+import '../models/expense_transaction.dart'; // THÊM IMPORT NÀY nếu chưa có
 
 class Routes {
   static const String login = '/login';
   static const String home = '/home';
-  static const String addTransaction = '/add-transaction';
+  static const String addTransaction = '/add-transaction'; // Sẽ dùng cho cả Thêm và Sửa
   static const String history = '/history';
   static const String settings = '/settings';
-  static const String userProfile = '/user-profile'; // <-- THÊM ROUTE MỚI
+  static const String userProfile = '/user-profile';
 
-  static Route<dynamic> generateRoute(RouteSettings routeSettings) { // Đổi tên settings thành routeSettings
+  static Route<dynamic> generateRoute(RouteSettings routeSettings) {
     switch (routeSettings.name) {
       case Routes.login:
         return MaterialPageRoute(builder: (_) => const LoginScreen());
       case Routes.home:
         return MaterialPageRoute(builder: (_) => const HomeScreen());
       case Routes.addTransaction:
-        return MaterialPageRoute(builder: (_) => const AddTransactionScreen());
+        final ExpenseTransaction? transactionToEdit;
+        // Kiểm tra xem arguments có được truyền và có đúng kiểu ExpenseTransaction không
+        if (routeSettings.arguments != null && routeSettings.arguments is ExpenseTransaction) {
+          transactionToEdit = routeSettings.arguments as ExpenseTransaction?;
+        } else {
+          transactionToEdit = null; // Nếu không có argument hoặc sai kiểu, coi như thêm mới
+        }
+        return MaterialPageRoute(
+          builder: (_) => AddTransactionScreen(existingTransaction: transactionToEdit),
+        );
       case Routes.history:
         return MaterialPageRoute(builder: (_) => const HistoryScreen());
       case Routes.settings:
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
-      case Routes.userProfile: // <-- THÊM CASE CHO USER PROFILE
+      case Routes.userProfile:
         return MaterialPageRoute(builder: (_) => const UserProfileScreen());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text("Lỗi Điều Hướng")),
             body: Center(child: Text('Không tìm thấy đường dẫn: ${routeSettings.name}')),
           ),
         );
