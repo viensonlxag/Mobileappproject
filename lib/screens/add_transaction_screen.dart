@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Import để dùng TextInputFormatter
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/expense_transaction.dart';
 import '../providers/app_provider.dart';
-import '../routes.dart'; // Import Routes để có thể điều hướng về home sau khi xóa
+import '../routes.dart';
+import '../utils/thousand_formatter.dart'; // Đảm bảo đường dẫn này đúng
 
 class AddTransactionScreen extends StatefulWidget {
   final ExpenseTransaction? existingTransaction;
@@ -27,6 +29,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   bool _isEditing = false;
   String? _editingTransactionId;
 
+  // Danh sách danh mục (NÊN đồng bộ với CategoryHelper hoặc lấy từ nguồn chung)
   final List<Map<String, dynamic>> _expenseCategories = [
     {'label': 'Ăn uống', 'icon': Icons.restaurant_menu_rounded, 'color': Colors.orange.shade700},
     {'label': 'Di chuyển', 'icon': Icons.directions_car_rounded, 'color': Colors.blue.shade700},
@@ -52,8 +55,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-
-    // Thêm listener cho _amountController để cập nhật trạng thái nút khi người dùng nhập liệu
     _amountController.addListener(_onAmountChanged);
 
     if (widget.existingTransaction != null) {
@@ -61,7 +62,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
       final tx = widget.existingTransaction!;
       _editingTransactionId = tx.id;
       _type = tx.type;
-      _amountController.text = tx.amount.abs().toStringAsFixed(0);
+      // Định dạng số tiền khi điền vào form sửa
+      _amountController.text = NumberFormat("#,##0", "vi_VN").format(tx.amount.abs());
       _noteController.text = tx.note ?? '';
       _selectedCategory = tx.category;
       _selectedDate = tx.date;
@@ -69,30 +71,28 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     }
   }
 
-  // Hàm được gọi mỗi khi nội dung của _amountController thay đổi
   void _onAmountChanged() {
-    // Gọi setState để rebuild widget và cập nhật trạng thái của nút Lưu/Cập nhật
-    // Dựa trên getter _isFormValid
-    if (mounted) { // Kiểm tra widget còn trong tree không
+    if (mounted) {
       setState(() {});
     }
   }
 
-
   @override
   void dispose() {
     _tabController.dispose();
-    _amountController.removeListener(_onAmountChanged); // Xóa listener khi dispose
+    _amountController.removeListener(_onAmountChanged);
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
   }
 
-  bool get _isFormValid =>
-      _amountController.text.isNotEmpty &&
-          double.tryParse(_amountController.text) != null &&
-          _selectedCategory != null &&
-          _selectedSource != null;
+  bool get _isFormValid {
+    final cleanAmountString = _amountController.text.replaceAll('.', '');
+    return cleanAmountString.isNotEmpty &&
+        double.tryParse(cleanAmountString) != null &&
+        _selectedCategory != null &&
+        _selectedSource != null;
+  }
 
   Future<void> _submitData() async {
     if (!_isFormValid) {
@@ -105,7 +105,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
       return;
     }
 
-    final amount = double.parse(_amountController.text);
+    final String cleanAmountString = _amountController.text.replaceAll('.', '');
+    final amount = double.parse(cleanAmountString);
     final appProvider = Provider.of<AppProvider>(context, listen: false);
 
     final transactionData = ExpenseTransaction(
@@ -120,40 +121,29 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     );
 
     try {
+      final String successMessage;
       if (_isEditing) {
         await appProvider.updateTransaction(transactionData);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã cập nhật giao dịch thành công!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        successMessage = 'Đã cập nhật giao dịch thành công!';
       } else {
         await appProvider.addTransaction(transactionData);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Đã ${_type == 'Chi tiêu' ? 'thêm chi tiêu' : 'thêm thu nhập'} thành công!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        successMessage = 'Đã ${_type == 'Chi tiêu' ? 'thêm chi tiêu' : 'thêm thu nhập'} thành công!';
       }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage), backgroundColor: Colors.green),
+      );
       Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Lỗi: ${error.toString()}'),
-          backgroundColor: Colors.redAccent,
-        ),
+        SnackBar(content: Text('Lỗi: ${error.toString()}'), backgroundColor: Colors.redAccent),
       );
     }
   }
 
   Future<void> _confirmDeleteTransaction() async {
     if (!_isEditing || _editingTransactionId == null) return;
-
     final bool? confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -427,12 +417,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               ),
             ),
             const SizedBox(height: 24),
-            _buildTextField( // Sẽ sử dụng _amountController đã có listener
+            _buildTextField(
               controller: _amountController,
               labelText: 'Số tiền',
               hintText: '0',
               icon: Icons.monetization_on_outlined,
               keyboardType: TextInputType.number,
+              inputFormatters: [ // Áp dụng formatter
+                FilteringTextInputFormatter.digitsOnly,
+                ThousandFormatter(),
+              ],
             ),
             const SizedBox(height: 20),
             Text('Chọn Danh Mục', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
@@ -448,7 +442,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                   avatar: Icon(category['icon'], size: 18, color: isSelected ? Colors.white : catColor),
                   selected: isSelected,
                   onSelected: (bool selected) {
-                    setState(() { // setState ở đây sẽ trigger rebuild và _isFormValid được tính lại
+                    setState(() {
                       _selectedCategory = selected ? category['label'] as String : null;
                     });
                   },
@@ -493,7 +487,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               child: ElevatedButton.icon(
                 icon: Icon(_isEditing ? Icons.edit_note_rounded : Icons.save_rounded, color: Colors.white),
                 label: Text(buttonLabel),
-                // onPressed giờ đây sẽ phản ánh đúng trạng thái của _isFormValid
                 onPressed: _isFormValid ? _submitData : null,
               ),
             ),
@@ -511,13 +504,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      // Nếu không phải là _amountController, không cần thêm onChanged ở đây
-      // onChanged: (controller == _amountController) ? (_) => _onAmountChanged() : null,
+      inputFormatters: inputFormatters,
       style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[800]),
       decoration: InputDecoration(
         labelText: labelText,
