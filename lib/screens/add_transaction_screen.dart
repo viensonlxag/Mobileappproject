@@ -29,7 +29,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   bool _isEditing = false;
   String? _editingTransactionId;
 
-  // Danh sách danh mục (NÊN đồng bộ với CategoryHelper hoặc lấy từ nguồn chung)
+  // Định dạng số tiền cho hiển thị và parse
+  final NumberFormat _currencyFormatter = NumberFormat("#,##0", "vi_VN");
+
+
   final List<Map<String, dynamic>> _expenseCategories = [
     {'label': 'Ăn uống', 'icon': Icons.restaurant_menu_rounded, 'color': Colors.orange.shade700},
     {'label': 'Di chuyển', 'icon': Icons.directions_car_rounded, 'color': Colors.blue.shade700},
@@ -63,7 +66,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
       _editingTransactionId = tx.id;
       _type = tx.type;
       // Định dạng số tiền khi điền vào form sửa
-      _amountController.text = NumberFormat("#,##0", "vi_VN").format(tx.amount.abs());
+      _amountController.text = _currencyFormatter.format(tx.amount.abs());
       _noteController.text = tx.note ?? '';
       _selectedCategory = tx.category;
       _selectedDate = tx.date;
@@ -73,6 +76,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
 
   void _onAmountChanged() {
     if (mounted) {
+      // Không cần gọi setState ở đây nữa vì ThousandFormatter đã xử lý việc cập nhật text
+      // và trạng thái của nút lưu sẽ được cập nhật khi build lại do các hành động khác
+      // hoặc khi người dùng tương tác với các trường khác.
+      // Nếu bạn muốn nút lưu cập nhật ngay lập tức khi gõ số tiền, thì giữ setState().
       setState(() {});
     }
   }
@@ -87,9 +94,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   }
 
   bool get _isFormValid {
+    // Khi kiểm tra, loại bỏ dấu chấm khỏi _amountController.text
     final cleanAmountString = _amountController.text.replaceAll('.', '');
     return cleanAmountString.isNotEmpty &&
         double.tryParse(cleanAmountString) != null &&
+        double.parse(cleanAmountString) > 0 && // Đảm bảo số tiền lớn hơn 0
         _selectedCategory != null &&
         _selectedSource != null;
   }
@@ -98,13 +107,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
     if (!_isFormValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng điền đầy đủ thông tin hợp lệ.'),
+          content: Text('Vui lòng điền đầy đủ thông tin hợp lệ. Số tiền phải lớn hơn 0.'),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
+    // Loại bỏ dấu chấm phân cách trước khi parse
     final String cleanAmountString = _amountController.text.replaceAll('.', '');
     final amount = double.parse(cleanAmountString);
     final appProvider = Provider.of<AppProvider>(context, listen: false);
@@ -181,7 +191,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Đóng màn hình sửa
       } catch (error) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -423,7 +433,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               hintText: '0',
               icon: Icons.monetization_on_outlined,
               keyboardType: TextInputType.number,
-              inputFormatters: [ // Áp dụng formatter
+              inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
                 ThousandFormatter(),
               ],

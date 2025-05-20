@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart'; // Đã chuyển sang fl_chart
+import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'dart:math' as math; // Import dart:math để sử dụng math.pi
+import 'dart:math' as math;
 
 import '../providers/app_provider.dart';
 import '../routes.dart';
 import '../screens/history_screen.dart';
 import '../screens/settings_screen.dart';
 import '../utils/category_helper.dart';
+import 'category_transactions_screen.dart'; // Thêm import cho CategoryTransactionsScreen
 
-// Widget mới cho logo chữ "S" cách điệu
+// _StylizedSLogo, HomeScreen, _HomeScreenState, PlaceholderWidget, _HomeContent,
+// _SectionTitle, _WelcomeBanner, _QuickActionsSection, _QuickActionItem,
+// _OverviewSection, _InfoCard giữ nguyên như phiên bản trước.
+// Chỉ phần _CategoryPieChartSection được sửa đổi.
+
 class _StylizedSLogo extends StatelessWidget {
   final Color backgroundColor;
   final Color textColor;
@@ -69,13 +74,13 @@ class _HomeScreenState extends State<HomeScreen> {
   static final List<Widget> _widgetOptions = <Widget>[
     const _HomeContent(),
     const HistoryScreen(),
-    Container(), // Placeholder cho tab Ghi chép (chỉ điều hướng)
+    Container(), // Placeholder for Add Transaction, handled by _onItemTapped
     const PlaceholderWidget(screenName: 'Ngân sách'),
-    const SettingsScreen(), // Màn hình Cài đặt
+    const SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
-    if (index == 2) { // Nút Ghi chép ở giữa
+    if (index == 2) {
       Navigator.pushNamed(context, Routes.addTransaction);
     } else {
       setState(() {
@@ -87,11 +92,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<bool> _onWillPop() async {
     if (_selectedIndex != 0) {
       setState(() {
-        _selectedIndex = 0; // Chuyển về tab Tổng quan
+        _selectedIndex = 0;
       });
-      return false; // Ngăn không cho pop HomeScreen
+      return false;
     }
-    return true; // Cho phép pop nếu đang ở tab Tổng quan (có thể thoát app)
+    return true;
   }
 
   @override
@@ -103,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        appBar: _selectedIndex == 0 // Chỉ hiển thị AppBar cho tab Tổng quan
+        appBar: _selectedIndex == 0
             ? AppBar(
           backgroundColor: appBarTheme.backgroundColor,
           foregroundColor: appBarForegroundColor,
@@ -119,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                'Budget', // Hoặc tên app của bạn
+                'Budget',
                 style: TextStyle(
                   fontFamily: titleFontFamily,
                   color: appBarForegroundColor,
@@ -142,8 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
           ],
         )
-            : null, // Không hiển thị AppBar cho các tab khác (Sổ GD, Ngân sách, Cài đặt)
-        // vì các màn hình đó có thể có AppBar riêng.
+            : null,
         body: IndexedStack(
           index: _selectedIndex,
           children: _widgetOptions,
@@ -151,8 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed, // Để tất cả các label hiển thị
-          // Các style của BottomNavigationBar sẽ được theme trong main.dart xử lý
+          type: BottomNavigationBarType.fixed,
           items: [
             const BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -170,13 +173,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.pinkAccent, // Màu của nút chính
+                    color: Colors.pinkAccent,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.pinkAccent.withAlpha((255 * 0.4).round()),
-                        blurRadius: 6,
+                        color: Colors.pinkAccent.withAlpha((255 * 0.5).round()),
                         spreadRadius: 1,
+                        blurRadius: 5,
                         offset: const Offset(0, 2),
                       ),
                     ],
@@ -210,7 +213,7 @@ class PlaceholderWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(screenName, style: Theme.of(context).textTheme.titleLarge ?? const TextStyle(fontSize: 24, color: Colors.grey)),
+      child: Text(screenName, style: Theme.of(context).textTheme.bodyLarge ?? const TextStyle()),
     );
   }
 }
@@ -237,7 +240,7 @@ class _HomeContent extends StatelessWidget {
             const _OverviewSection(),
             const SizedBox(height: 16),
             // _SectionTitle cho "Phân bổ chi tiêu" đã được chuyển vào trong _CategoryPieChartSection
-            _CategoryPieChartSection(),
+            const _CategoryPieChartSection(), // Biểu đồ và danh sách chi tiết ở đây
             const SizedBox(height: 60),
           ],
         ),
@@ -257,7 +260,7 @@ class _SectionTitle extends StatelessWidget {
       child: Text(
         title,
         style: (Theme.of(context).textTheme.titleLarge ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))
-            .copyWith(color: Colors.grey[850]), // Sử dụng màu từ theme hoặc một màu phù hợp
+            .copyWith(color: Colors.grey[850]),
       ),
     );
   }
@@ -269,7 +272,7 @@ class _WelcomeBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final userName = Provider.of<AppProvider>(context).userName;
-    const TextStyle defaultTextStyle = TextStyle(); // Fallback style
+    const TextStyle defaultTextStyle = TextStyle();
 
     return Container(
       margin: const EdgeInsets.all(16.0),
@@ -365,6 +368,13 @@ class _QuickActionsSection extends StatelessWidget {
             icon: Icons.history_edu_outlined,
             label: 'Lịch sử GD',
             onTap: () {
+              // Assuming HistoryScreen is a full page and _selectedIndex should change
+              // If it's pushed as a new route, the home screen's BottomNavBar might still be visible.
+              // The current implementation in _HomeScreenState._widgetOptions directly shows HistoryScreen.
+              // To navigate like others and keep consistent state, you might need to use Navigator.pushNamed
+              // For now, let's assume _HomeScreenState handles navigation to HistoryScreen correctly.
+              // This could be: (_HomeScreenState.of(context) as dynamic)._onItemTapped(1);
+              // Or if a route exists:
               Navigator.pushNamed(context, Routes.history);
             },
             color: Colors.blueAccent,
@@ -541,9 +551,10 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-// --- WIDGET BIỂU ĐỒ (PIE & BAR) ---
+// --- WIDGET BIỂU ĐỒ (PIE & BAR) VÀ DANH SÁCH CHI TIẾT DANH MỤC ---
 enum ChartType { pie, bar }
 enum BarChartPeriod { daily, monthly }
+enum CategoryDetailType { subCategory, parentCategory }
 
 class _CategoryPieChartSection extends StatefulWidget {
   const _CategoryPieChartSection();
@@ -552,10 +563,36 @@ class _CategoryPieChartSection extends StatefulWidget {
   State<_CategoryPieChartSection> createState() => _CategoryPieChartSectionState();
 }
 
-class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
+class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with SingleTickerProviderStateMixin {
   int _touchedIndex = -1;
-  ChartType _selectedChartType = ChartType.bar; // Mặc định hiển thị BarChart
-  BarChartPeriod _selectedBarChartPeriod = BarChartPeriod.monthly; // Mặc định xem theo tháng
+  ChartType _selectedChartType = ChartType.bar;
+  BarChartPeriod _selectedBarChartPeriod = BarChartPeriod.monthly;
+  CategoryDetailType _selectedCategoryDetailType = CategoryDetailType.subCategory;
+
+  late TabController _categoryTabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoryTabController = TabController(length: 2, vsync: this);
+    _categoryTabController.addListener(() {
+      if (!_categoryTabController.indexIsChanging) {
+        if (mounted) {
+          setState(() {
+            _selectedCategoryDetailType = _categoryTabController.index == 0
+                ? CategoryDetailType.subCategory
+                : CategoryDetailType.parentCategory;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _categoryTabController.dispose();
+    super.dispose();
+  }
 
   Widget _buildAdvancedLegendItem(BuildContext context, {
     required Color color,
@@ -566,17 +603,17 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
   }) {
     final textTheme = Theme.of(context).textTheme;
     final Color baseTextColor = Colors.grey[800]!;
-    final Color touchedColor = color; // Màu của danh mục
-    final Color currentTextColor = isTouched ? touchedColor.withOpacity(0.95) : baseTextColor;
+    final Color touchedColor = color;
+    final Color currentTextColor = isTouched ? touchedColor.withOpacity(0.9) : baseTextColor;
     final FontWeight currentFontWeight = isTouched ? FontWeight.bold : FontWeight.w500;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.0), // Giảm padding để các mục gần nhau hơn
+      padding: const EdgeInsets.symmetric(vertical: 3.5),
       child: Row(
         children: [
           Container(
-            width: isTouched ? 11 : 9, // Chấm màu to hơn một chút khi chạm
-            height: isTouched ? 11 : 9,
+            width: isTouched ? 10 : 8,
+            height: isTouched ? 10 : 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: color,
@@ -584,15 +621,15 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
             ),
           ),
           const SizedBox(width: 8),
-          Icon(categoryIcon, size: 17, color: isTouched ? touchedColor : color.withOpacity(0.9)), // Icon nhỏ hơn chút
-          const SizedBox(width: 6),
+          Icon(categoryIcon, size: 18, color: isTouched ? touchedColor : color.withOpacity(0.85)),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               categoryName,
               style: textTheme.bodySmall?.copyWith(
                 fontWeight: currentFontWeight,
                 color: currentTextColor,
-                fontSize: 11, // Giảm font size
+                fontSize: 11.5,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -602,8 +639,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
             '${percentage.toStringAsFixed(0)}%',
             style: textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.bold,
-              color: isTouched ? touchedColor : Colors.black.withOpacity(0.85),
-              fontSize: isTouched ? 10.5 : 10, // Giảm font size
+              color: isTouched ? touchedColor : Colors.black.withOpacity(0.8),
+              fontSize: isTouched ? 11 : 10.5,
             ),
           ),
         ],
@@ -634,15 +671,15 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
           color: sectionColors[i],
           value: entry.value,
           title: '${percentage.toStringAsFixed(0)}%',
-          radius: isTouched ? 50.0 : 40.0, // Tăng bán kính một chút
+          radius: isTouched ? 48.0 : 38.0,
           titleStyle: TextStyle(
-            fontSize: isTouched ? 11.0 : 9.0, // Điều chỉnh font
+            fontSize: isTouched ? 10.0 : 8.0,
             fontWeight: FontWeight.bold,
-            color: Colors.white, // Thử màu trắng cho dễ đọc trên nền màu
-            shadows: const [Shadow(color: Colors.black38, blurRadius: 2)],
+            color: Colors.black.withOpacity(0.8),
+            shadows: const [Shadow(color: Colors.white70, blurRadius: 1)],
           ),
-          showTitle: percentage > 2, // Chỉ hiển thị nếu % > 2%
-          titlePositionPercentageOffset: 0.6, // Đặt giá trị bên trong slice
+          showTitle: percentage > 1.5,
+          titlePositionPercentageOffset: 1.25,
         ),
       );
     }
@@ -654,9 +691,9 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          flex: 6, // Tăng không gian cho biểu đồ
+          flex: 5,
           child: AspectRatio(
-            aspectRatio: 1, // Giữ biểu đồ tròn
+            aspectRatio: 0.9,
             child: PieChart(
               PieChartData(
                 pieTouchData: PieTouchData(
@@ -671,19 +708,19 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
                   },
                 ),
                 borderData: FlBorderData(show: false),
-                sectionsSpace: 2, // Tăng khoảng cách giữa các slice
-                centerSpaceRadius: 38, // Lỗ ở giữa
+                sectionsSpace: 1.5,
+                centerSpaceRadius: 40,
                 sections: pieChartSections,
-                startDegreeOffset: -90, // Bắt đầu từ trên
+                startDegreeOffset: -90,
               ),
               swapAnimationDuration: const Duration(milliseconds: 250),
               swapAnimationCurve: Curves.easeOutCubic,
             ),
           ),
         ),
-        const SizedBox(width: 10), // Giảm khoảng cách
+        const SizedBox(width: 12),
         Expanded(
-          flex: 4, // Giảm không gian cho legend
+          flex: 5,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -717,17 +754,25 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
     final int intValue = value.toInt();
 
     if (period == BarChartPeriod.daily) {
-      int displayInterval = (daysInMonth / 6).ceil(); // Chia thành khoảng 6-7 nhãn
-      if (displayInterval < 1) displayInterval = 1;
+      int displayInterval = (daysInMonth / 5).ceil();
+      if (displayInterval < 2) displayInterval = 2;
+      if (displayInterval == 0 && daysInMonth > 0) displayInterval = 1;
 
-      if (intValue == 1 || intValue == daysInMonth || (intValue % displayInterval == 0 && intValue != 0 && intValue < daysInMonth) ) {
+      if (intValue == 1 || intValue == daysInMonth || (daysInMonth > 10 && intValue % displayInterval == 0 && intValue != 0 && intValue < daysInMonth) ) {
+        text = intValue.toString();
+      } else if (daysInMonth <= 10 && intValue % 2 == 0 && intValue != 0) {
         text = intValue.toString();
       }
     } else { // Monthly
       final monthIndex = value.toInt();
       if (monthIndex >= 0 && monthIndex < monthKeys.length) {
-        // Hiển thị "T" + số tháng cho ngắn gọn
-        text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
+        if (monthKeys.length <= 3 ) {
+          text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
+        } else {
+          if (monthIndex == 0 || monthIndex == monthKeys.length - 1 || monthIndex == (monthKeys.length / 2).floor()) {
+            text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
+          }
+        }
       }
     }
     if (text.isEmpty) {
@@ -735,42 +780,35 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
     }
     return SideTitleWidget(
         axisSide: meta.axisSide,
-        space: 5, // Tăng space một chút
+        space: 4,
         angle: 0,
-        child: Text(text, style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700]))
+        child: Text(text, style: textTheme.labelSmall?.copyWith(fontSize: 9.5))
     );
   }
 
   Widget _getLeftTitleWidgets(double value, TitleMeta meta, BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    // Định dạng số để chỉ hiển thị số, không có chữ "Tr" hay "N"
-    // và sử dụng dấu chấm phân cách hàng nghìn nếu cần thiết (cho số lớn hơn 1 triệu)
-    final numberFormatter = NumberFormat("#,##0.##", "vi_VN");
+    final numberFormatter = NumberFormat("#,##0.#", "vi_VN");
 
     if (value == meta.min && meta.min == 0) {
       return SideTitleWidget(
         axisSide: meta.axisSide,
         space: 4,
-        child: Text("0", style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[600])),
+        child: Text("0", style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])),
       );
     }
 
-    // Chỉ hiển thị các nhãn tại các khoảng chính do fl_chart tính toán
-    if (value > meta.min && value <= meta.max) {
-      // Chia giá trị cho 1,000,000 để tính theo đơn vị triệu
-      double displayValue = value / 1000000.0;
-      // Nếu giá trị sau khi chia là số nguyên (ví dụ 1.0, 2.0), thì không hiển thị phần thập phân
-      // Ngược lại, hiển thị 1 chữ số thập phân (ví dụ 0.7, 1.5)
-      String formattedValue = (displayValue == displayValue.truncateToDouble())
-          ? numberFormatter.format(displayValue) // số nguyên
-          : NumberFormat("#,##0.#", "vi_VN").format(displayValue); // số có thập phân
-
+    final double interval = meta.appliedInterval;
+    if (value > meta.min && value <= meta.max && ( (value % interval).abs() < 0.01 * interval || ((interval - (value % interval).abs()) < 0.01 * interval )) ) {
+      if (value == meta.max && (meta.max - (value - interval)).abs() < interval * 0.5 && meta.max != value) {
+        return const SizedBox.shrink();
+      }
       return SideTitleWidget(
         axisSide: meta.axisSide,
         space: 4,
         child: Text(
-            formattedValue,
-            style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[600])
+            numberFormatter.format(value / 1000000),
+            style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])
         ),
       );
     }
@@ -785,7 +823,6 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
     final now = DateTime.now();
     final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
 
-    // Lấy 3 tháng gần nhất cho biểu đồ cột tháng
     final List<MapEntry<String,double>> recentMonthlyExpenses = appProvider.getRecentMonthlyExpenses(numberOfMonths: 3);
     final List<String> recentMonthKeys = recentMonthlyExpenses.map((e) => e.key).toList();
 
@@ -795,27 +832,27 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
       if (dataForChartIntKeys.isNotEmpty) {
         maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
       }
-      maxY = (maxY == 0) ? 100000 : (maxY * 1.25).ceilToDouble(); // Tăng giá trị min nếu maxY = 0
+      maxY = (maxY == 0) ? 50000 : (maxY * 1.3).ceilToDouble();
 
-    } else { // Monthly - Sử dụng recentMonthlyExpenses
+    } else { // Monthly
       for(int i=0; i < recentMonthlyExpenses.length; i++){
         dataForChartIntKeys[i] = recentMonthlyExpenses[i].value;
       }
       if (dataForChartIntKeys.isNotEmpty) {
         maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
       }
-      maxY = (maxY == 0) ? 1000000 : (maxY * 1.25).ceilToDouble(); // Tăng giá trị min nếu maxY = 0
-      if (maxY < 500000 && maxY > 0) maxY = 500000; // Đảm bảo trục Y có khoảng hợp lý
+      maxY = (maxY == 0) ? 1000000 : (maxY * 1.3).ceilToDouble();
+      if (maxY < 500000 && maxY > 0) maxY = 500000;
     }
 
     List<BarChartGroupData> barGroups = dataForChartIntKeys.entries.map((entry) {
-      Color barColor = (Theme.of(context).colorScheme.primary).withOpacity(0.6);
+      Color barColor = (Theme.of(context).colorScheme.primaryContainer).withOpacity(0.6);
       if (_selectedBarChartPeriod == BarChartPeriod.monthly) {
-        if (entry.key == recentMonthlyExpenses.length - 1) { // Tháng hiện tại (cuối cùng trong list)
+        if (entry.key == recentMonthlyExpenses.length - 1) { // Current month
           barColor = Theme.of(context).colorScheme.primary;
         }
-      } else {
-        barColor = Theme.of(context).colorScheme.primary.withOpacity(0.75);
+      } else { // Daily
+        barColor = Theme.of(context).colorScheme.primary.withOpacity(0.85);
       }
 
       return BarChartGroupData(
@@ -824,8 +861,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
           BarChartRodData(
             toY: entry.value,
             color: barColor,
-            width: _selectedBarChartPeriod == BarChartPeriod.daily ? 12 : 26, // Điều chỉnh độ rộng cột
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)), // Bo góc trên
+            width: _selectedBarChartPeriod == BarChartPeriod.daily ? 10 : 28,
+            borderRadius: const BorderRadius.all(Radius.circular(5)),
           )
         ],
       );
@@ -835,15 +872,18 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
 
 
     return Padding(
-      padding: const EdgeInsets.only(top: 0.0, right: 16.0, bottom: 0.0, left: 0.0), // Giảm padding
+      padding: const EdgeInsets.only(top: 0.0, right: 16.0, bottom: 8.0, left: 4.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 12.0, top: 8.0, bottom: 2.0), // Điều chỉnh padding
-            child: Text(
-              "(Triệu)", // Đơn vị cho trục Y
-              style: textTheme.labelSmall?.copyWith(color: Colors.grey[600], fontSize: 8.5),
+          Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8.0, top: 0.0, bottom: 6.0),
+              child: Text(
+                "(Triệu)",
+                style: textTheme.labelSmall?.copyWith(color: Colors.grey[600], fontSize: 9),
+              ),
             ),
           ),
           Expanded(
@@ -879,7 +919,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
                       );
                     },
                   ),
-                  handleBuiltInTouches: true, // Cho phép chạm để hiển thị tooltip
+                  handleBuiltInTouches: true,
                 ),
                 titlesData: FlTitlesData(
                   show: true,
@@ -896,9 +936,9 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 38, // Tăng nhẹ để chứa số và "Tr" (nếu có)
+                      reservedSize: 38,
                       getTitlesWidget: (value, meta) => _getLeftTitleWidgets(value, meta, context),
-                      interval: maxY > 0 ? (maxY / 4).ceilToDouble() : null, // Mục tiêu 5 nhãn (0 -> max)
+                      interval: maxY > 0 ? (maxY / 4).ceilToDouble() : 200000,
                     ),
                   ),
                 ),
@@ -907,7 +947,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
                   show: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.shade300.withOpacity(0.5), strokeWidth: 0.7),
-                  horizontalInterval: maxY > 0 ? (maxY / 4).ceilToDouble() : 100000, // 4-5 đường lưới
+                  horizontalInterval: maxY > 0 ? (maxY / 4).ceilToDouble() : 100000,
                 ),
                 barGroups: barGroups,
                 alignment: BarChartAlignment.spaceAround,
@@ -989,6 +1029,152 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
     );
   }
 
+  Widget _buildCategoryDetailsList(BuildContext context, AppProvider appProvider) {
+    final dataMap = _selectedCategoryDetailType == CategoryDetailType.subCategory
+        ? appProvider.categoryBreakdown
+        : appProvider.parentCategoryBreakdown;
+
+    final textTheme = Theme.of(context).textTheme;
+    final currencyFormatter = NumberFormat("#,##0đ", "vi_VN");
+
+    if (dataMap.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
+        child: Center(child: Text(
+            _selectedCategoryDetailType == CategoryDetailType.subCategory
+                ? "Không có chi tiêu nào để hiển thị."
+                : "Chưa có dữ liệu danh mục cha.",
+            style: textTheme.bodyMedium?.copyWith(color: Colors.grey[600]))),
+      );
+    }
+
+    final sortedCategories = dataMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: DefaultTabController( // This DefaultTabController might not be necessary if _categoryTabController manages the state.
+            length: 2,
+            initialIndex: _selectedCategoryDetailType == CategoryDetailType.subCategory ? 0 : 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 35,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: TabBar(
+                    controller: _categoryTabController,
+                    indicator: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.black54,
+                    labelStyle: textTheme.labelLarge?.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
+                    unselectedLabelStyle: textTheme.labelMedium?.copyWith(fontSize: 13, fontWeight: FontWeight.w500),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    tabs: const [
+                      Tab(text: 'Danh mục con'),
+                      Tab(text: 'Danh mục cha'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: sortedCategories.length,
+          itemBuilder: (context, index) {
+            final entry = sortedCategories[index];
+            Map<String, dynamic> categoryDetails;
+
+            if (_selectedCategoryDetailType == CategoryDetailType.subCategory) {
+              categoryDetails = CategoryHelper.getCategoryDetails(entry.key, 'Chi tiêu');
+            } else {
+              categoryDetails = AppProvider.getParentCategoryVisuals(entry.key);
+            }
+
+            return _buildDetailedCategoryListItem(
+              context,
+              icon: categoryDetails['icon'] as IconData,
+              iconColor: categoryDetails['color'] as Color,
+              categoryName: entry.key,
+              amount: entry.value,
+              formatter: currencyFormatter,
+              onTap: () {
+                // CẬP NHẬT: Điều hướng đến CategoryTransactionsScreen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CategoryTransactionsScreen(
+                      categoryName: entry.key,
+                      categoryType: _selectedCategoryDetailType,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailedCategoryListItem(BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required String categoryName,
+    required double amount,
+    required NumberFormat formatter,
+    VoidCallback? onTap,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: iconColor.withOpacity(0.15),
+                foregroundColor: iconColor,
+                radius: 20,
+                child: Icon(icon, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  categoryName,
+                  style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                formatter.format(amount),
+                style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: Colors.grey[800]),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey[400]),
+              ]
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
@@ -1041,11 +1227,13 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> {
             },
             child: SizedBox(
               key: ValueKey(_selectedChartType.toString() + _selectedBarChartPeriod.toString()),
-              height: 230, // Chiều cao cố định cho khu vực biểu đồ
+              height: 230,
               child: chartView,
             ),
           ),
         ),
+        const SizedBox(height: 16),
+        _buildCategoryDetailsList(context, appProvider),
       ],
     );
   }

@@ -43,13 +43,70 @@ class AppProvider extends ChangeNotifier {
   String _userName = "Bạn";
   DateTime? _userDateOfBirth;
 
-  static const String _userNameKey = 'app_user_name_v2_3_1_barchart_recent'; // Cập nhật key nếu cần
-  static const String _userDateOfBirthKey = 'app_user_dob_v2_3_1_barchart_recent';
+  // Cập nhật key để tránh xung đột với dữ liệu cũ nếu cấu trúc thay đổi đáng kể
+  static const String _userNameKey = 'app_user_name_v2_4';
+  static const String _userDateOfBirthKey = 'app_user_dob_v2_4';
 
   User? get currentUser => _currentUser;
   String get userName => _userName;
   DateTime? get userDateOfBirth => _userDateOfBirth;
   List<ExpenseTransaction> get transactions => List.unmodifiable(_transactions);
+
+  // --- ĐỊNH NGHĨA DANH MỤC CHA VÀ CÁC THUỘC TÍNH CỦA CHÚNG ---
+  // Key: Tên Danh mục cha
+  // Value: Map chứa 'icon', 'color', và 'subCategories' (List<String>)
+  // BẠN CẦN TÙY CHỈNH MAP NÀY CHO PHÙ HỢP VỚI ỨNG DỤNG CỦA MÌNH
+  // Đảm bảo các 'label' trong subCategories khớp với các 'label' bạn dùng trong AddTransactionScreen
+  static final Map<String, Map<String, dynamic>> _parentCategoryDefinitions = {
+    'Chi tiêu sinh hoạt': { // Ví dụ từ hình ảnh bạn gửi
+      'icon': Icons.receipt_long_outlined, // Icon hóa đơn cho sinh hoạt
+      'color': Colors.orange.shade700,
+      'subCategories': ['Ăn uống', 'Di chuyển', 'Hóa đơn', 'Sức khỏe', 'Chợ, siêu thị'],
+    },
+    'Chi phí phát sinh': { // Ví dụ từ hình ảnh bạn gửi
+      'icon': Icons.attach_money_rounded, // Icon tiền
+      'color': Colors.green.shade600,
+      'subCategories': ['Mua sắm', 'Giải trí'], // Giả sử Mua sắm, Giải trí là chi phí phát sinh
+    },
+    'Chi phí cố định': { // Ví dụ từ hình ảnh bạn gửi
+      'icon': Icons.home_rounded, // Icon nhà cửa cho chi phí cố định
+      'color': Colors.blue.shade700,
+      'subCategories': ['Giáo dục'], // Giả sử Giáo dục là chi phí cố định
+    },
+    // Bạn có thể thêm các danh mục cha khác ở đây
+  };
+  // Danh mục cha mặc định cho các danh mục con không được map rõ ràng
+  static const String _defaultParentCategory = 'Chưa phân loại'; // Giống hình ảnh của bạn
+
+  // Phương thức tĩnh để lấy icon và màu cho danh mục cha
+  static Map<String, dynamic> getParentCategoryVisuals(String parentCategoryName) {
+    if (_parentCategoryDefinitions.containsKey(parentCategoryName)) {
+      return {
+        'icon': _parentCategoryDefinitions[parentCategoryName]!['icon'] ?? Icons.label_outline_rounded,
+        'color': _parentCategoryDefinitions[parentCategoryName]!['color'] ?? Colors.grey.shade600,
+      };
+    }
+    // Mặc định cho _defaultParentCategory hoặc các danh mục cha không xác định
+    if (parentCategoryName == _defaultParentCategory) {
+      return {
+        'icon': Icons.help_outline_rounded, // Icon dấu hỏi cho "Chưa phân loại"
+        'color': Colors.blueGrey.shade400,
+      };
+    }
+    // Trường hợp không mong muốn
+    return {
+      'icon': Icons.apps_rounded,
+      'color': Colors.grey,
+    };
+  }
+  // Getter tĩnh để truy cập _parentCategoryDefinitions từ bên ngoài (ví dụ: từ CategoryTransactionsScreen)
+  static Map<String, Map<String, dynamic>> getParentCategoryDefinitionMap() {
+    return _parentCategoryDefinitions;
+  }
+  static String getDefaultParentCategoryName() {
+    return _defaultParentCategory;
+  }
+
 
   AppProvider() {
     _authService.userChanges.listen((firebaseUser) async {
@@ -59,12 +116,12 @@ class AppProvider extends ChangeNotifier {
       if (_currentUser != null) {
         _firestoreService = FirestoreService(_currentUser!.uid);
         await _loadUserProfile();
-        _listenTransactions();
+        _listenTransactions(); // Gọi sau khi _loadUserProfile và _firestoreService được thiết lập
       } else {
         _firestoreService = null;
         _transactions = [];
         _resetUserProfile();
-        // _calculateTotals(); // Getters sẽ tự tính
+        // Không cần gọi _calculateTotals() ở đây vì getters sẽ tự tính khi _transactions rỗng
       }
       _setLoading(false);
     });
@@ -72,7 +129,6 @@ class AppProvider extends ChangeNotifier {
 
   void _listenTransactions() {
     if (_firestoreService == null) {
-      print("AppProvider: FirestoreService is null, cannot listen to transactions.");
       _transactions = [];
       notifyListeners();
       return;
@@ -197,6 +253,47 @@ class AppProvider extends ChangeNotifier {
     return data;
   }
 
+  Map<String, double> get parentCategoryBreakdown {
+    final Map<String, double> parentData = {};
+    // Khởi tạo tất cả các danh mục cha đã định nghĩa với giá trị 0
+    for (var parentName in _parentCategoryDefinitions.keys) {
+      parentData[parentName] = 0.0;
+    }
+    // Khởi tạo cho danh mục cha mặc định nếu nó chưa có trong definitions
+    if (!parentData.containsKey(_defaultParentCategory)){
+      parentData[_defaultParentCategory] = 0.0;
+    }
+
+    for (var tx in currentMonthTransactions) {
+      if ((tx.amount ?? 0.0) < 0) {
+        String parentCategoryName = _defaultParentCategory;
+        bool foundParent = false;
+        for (var parentEntry in _parentCategoryDefinitions.entries) {
+          final subCategories = parentEntry.value['subCategories'];
+          if (subCategories is List<String> && subCategories.contains(tx.category)) {
+            parentCategoryName = parentEntry.key;
+            foundParent = true;
+            break;
+          }
+        }
+        // Nếu danh mục con là "Khác" (theo định nghĩa trong AddTransactionScreen)
+        // và nó không được map vào một danh mục cha cụ thể nào ở trên,
+        // thì nó sẽ được gán vào _defaultParentCategory.
+        if (tx.category == 'Khác' && !foundParent) {
+          parentCategoryName = _defaultParentCategory;
+        }
+
+        parentData.update(
+            parentCategoryName,
+                (value) => value + (tx.amount?.abs() ?? 0.0),
+            ifAbsent: () => (tx.amount?.abs() ?? 0.0)
+        );
+      }
+    }
+    parentData.removeWhere((key, value) => value == 0.0);
+    return parentData;
+  }
+
   String get expenseCompareText {
     final currentMonthExp = totalExpense;
     final prevMonthExp = previousMonthTransactions
@@ -230,7 +327,6 @@ class AppProvider extends ChangeNotifier {
     return sortedTx.take(5).toList();
   }
 
-  // --- GETTERS CHO BAR CHART ---
   Map<int, double> get dailyExpensesCurrentMonth {
     final Map<int, double> dailyData = {};
     final now = DateTime.now();
@@ -249,16 +345,12 @@ class AppProvider extends ChangeNotifier {
     return dailyData;
   }
 
-  /// Trả về Map chi tiêu theo tháng cho N tháng gần nhất (bao gồm tháng hiện tại).
-  /// Key: Tên tháng (String, ví dụ "Thg 1"), Value: tổng chi tiêu (double).
-  /// Dữ liệu được sắp xếp từ tháng cũ nhất đến tháng mới nhất.
   List<MapEntry<String, double>> getRecentMonthlyExpenses({int numberOfMonths = 6}) {
     final List<MapEntry<String, double>> monthlyDataList = [];
     final now = DateTime.now();
-    final monthFormat = DateFormat('MMM', 'vi_VN'); // Ví dụ: "Thg 1"
+    final monthFormat = DateFormat('MMM', 'vi_VN');
 
     for (int i = numberOfMonths - 1; i >= 0; i--) {
-      // Tính toán tháng và năm cho từng mục trong quá khứ
       DateTime targetMonthDateTime = DateTime(now.year, now.month - i, 1);
 
       double totalForMonth = _transactions
@@ -273,7 +365,6 @@ class AppProvider extends ChangeNotifier {
     return monthlyDataList;
   }
 
-  // Giữ lại getter cũ nếu bạn vẫn muốn có tùy chọn xem cả năm
   Map<String, double> get monthlyExpensesCurrentYear {
     final Map<String, double> monthlyData = {};
     final now = DateTime.now();
@@ -297,7 +388,6 @@ class AppProvider extends ChangeNotifier {
     }
     return monthlyData;
   }
-  // --- KẾT THÚC GETTERS CHO BAR CHART ---
 
   Future<void> signIn(String email, String pass) async {
     _setLoading(true);
@@ -392,9 +482,5 @@ class AppProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
-  }
-
-  void _calculateTotals() {
-    // Các getters sẽ tự tính toán.
   }
 }
