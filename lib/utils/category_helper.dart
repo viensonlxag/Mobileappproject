@@ -54,4 +54,14 @@ class CategoryHelper {
   static Color getCategoryColor(String categoryLabel, String transactionType) {
     return getCategoryDetails(categoryLabel, transactionType)['color'] as Color;
   }
+
+  // ***** THÊM PHƯƠNG THỨC NÀY *****
+  static List<Map<String, dynamic>> getExpenseCategories() {
+    return _expenseCategories;
+  }
+
+  // (Tùy chọn) Bạn cũng có thể thêm một phương thức tương tự cho danh mục thu nhập nếu cần
+  static List<Map<String, dynamic>> getIncomeCategories() {
+    return _incomeCategories;
+  }
 }

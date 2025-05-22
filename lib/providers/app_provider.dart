@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/expense_transaction.dart';
+import '../models/budget.dart'; // ***** THÊM IMPORT CHO BUDGET MODEL *****
 import '../routes.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -12,6 +13,7 @@ class AppProvider extends ChangeNotifier {
   FirestoreService? _firestoreService;
   User? _currentUser;
   List<ExpenseTransaction> _transactions = [];
+  List<Budget> _budgets = []; // ***** DANH SÁCH LƯU TRỮ NGÂN SÁCH *****
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -44,14 +46,14 @@ class AppProvider extends ChangeNotifier {
   static const String _userNameKey = 'app_user_name_v2_4';
   static const String _userDateOfBirthKey = 'app_user_dob_v2_4';
   static const String _savedEmailKey = 'app_saved_login_email';
-  static const String _savedPasswordKey = 'app_saved_login_password'; // Key mới cho mật khẩu đã lưu
+  static const String _savedPasswordKey = 'app_saved_login_password';
 
   User? get currentUser => _currentUser;
   String get userName => _userName;
   DateTime? get userDateOfBirth => _userDateOfBirth;
   List<ExpenseTransaction> get transactions => List.unmodifiable(_transactions);
+  List<Budget> get budgets => List.unmodifiable(_budgets); // ***** GETTER CHO NGÂN SÁCH *****
 
-  // ... (Các định nghĩa danh mục cha và getters giữ nguyên) ...
   static final Map<String, Map<String, dynamic>> _parentCategoryDefinitions = {
     'Chi tiêu sinh hoạt': {
       'icon': Icons.receipt_long_outlined,
@@ -106,9 +108,11 @@ class AppProvider extends ChangeNotifier {
         _firestoreService = FirestoreService(_currentUser!.uid);
         await _loadUserProfile();
         _listenTransactions();
+        _listenBudgets(); // ***** GỌI LẮNG NGHE NGÂN SÁCH *****
       } else {
         _firestoreService = null;
         _transactions = [];
+        _budgets = []; // ***** RESET NGÂN SÁCH KHI ĐĂNG XUẤT *****
         _resetUserProfile();
       }
       _setLoading(false);
@@ -127,6 +131,24 @@ class AppProvider extends ChangeNotifier {
     }, onError: (error) {
       _setError("Không thể tải danh sách giao dịch: ${error.toString()}");
       _transactions = [];
+      notifyListeners();
+    });
+  }
+
+  // ***** PHƯƠNG THỨC LẮNG NGHE THAY ĐỔI NGÂN SÁCH TỪ FIRESTORE *****
+  void _listenBudgets() {
+    if (_firestoreService == null) {
+      _budgets = [];
+      notifyListeners();
+      return;
+    }
+    // Giả sử FirestoreService có phương thức streamBudgets() tương tự streamTransactions()
+    _firestoreService!.streamBudgets().listen((budgetList) {
+      _budgets = budgetList;
+      notifyListeners();
+    }, onError: (error) {
+      _setError("Không thể tải danh sách ngân sách: ${error.toString()}");
+      _budgets = [];
       notifyListeners();
     });
   }
@@ -192,7 +214,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // --- Getters for financial data (giữ nguyên) ---
   List<ExpenseTransaction> get currentMonthTransactions {
     final now = DateTime.now();
     return _transactions
@@ -434,7 +455,7 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // --- Transaction Methods (giữ nguyên) ---
+  // --- Transaction Methods ---
   Future<void> addTransaction(ExpenseTransaction tx) async {
     if (_firestoreService == null) {
       _setError('User chưa đăng nhập để thêm giao dịch');
@@ -486,6 +507,59 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  // ***** BUDGET MANAGEMENT METHODS *****
+  Future<void> addBudget(Budget budget) async {
+    if (_firestoreService == null) {
+      _setError('User chưa đăng nhập để thêm ngân sách');
+      throw Exception('User chưa đăng nhập để thêm ngân sách');
+    }
+    _setLoading(true);
+    clearError();
+    try {
+      await _firestoreService!.addBudget(budget);
+    } catch (e) {
+      _setError("Lỗi thêm ngân sách: ${e.toString()}");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> updateBudget(Budget updatedBudget) async {
+    if (_firestoreService == null) {
+      _setError('User chưa đăng nhập để cập nhật ngân sách');
+      throw Exception('User chưa đăng nhập để cập nhật ngân sách');
+    }
+    _setLoading(true);
+    clearError();
+    try {
+      await _firestoreService!.updateBudget(updatedBudget);
+    } catch (e) {
+      _setError("Lỗi cập nhật ngân sách: ${e.toString()}");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> deleteBudget(String budgetId) async {
+    if (_firestoreService == null) {
+      _setError('User chưa đăng nhập để xóa ngân sách');
+      throw Exception('User chưa đăng nhập để xóa ngân sách');
+    }
+    _setLoading(true);
+    clearError();
+    try {
+      await _firestoreService!.deleteBudget(budgetId);
+    } catch (e) {
+      _setError("Lỗi xóa ngân sách: ${e.toString()}");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+
   // --- Shared Preferences for "Remember Credentials" ---
   Future<String?> getSavedEmail() async {
     final prefs = await SharedPreferences.getInstance();
@@ -502,17 +576,12 @@ class AppProvider extends ChangeNotifier {
     await prefs.remove(_savedEmailKey);
   }
 
-  // THÊM MỚI: Các hàm cho lưu/tải/xóa mật khẩu
-  // CẢNH BÁO: LƯU MẬT KHẨU DẠNG TEXT THUẦN LÀ RẤT KHÔNG AN TOÀN
   Future<String?> getSavedPassword() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_savedPasswordKey);
   }
 
   Future<void> savePassword(String password) async {
-    // CẢNH BÁO: Đây là cách lưu trữ mật khẩu không an toàn.
-    // Chỉ sử dụng cho mục đích demo hoặc nếu bạn chấp nhận rủi ro.
-    // Nên sử dụng flutter_secure_storage cho dữ liệu nhạy cảm.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_savedPasswordKey, password);
   }

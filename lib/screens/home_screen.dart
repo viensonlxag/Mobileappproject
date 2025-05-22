@@ -9,7 +9,8 @@ import '../routes.dart';
 import '../screens/history_screen.dart';
 import '../screens/settings_screen.dart';
 import '../utils/category_helper.dart';
-import 'category_transactions_screen.dart'; // Thêm import cho CategoryTransactionsScreen
+import 'category_transactions_screen.dart';
+import 'budget_screen.dart'; // ***** THÊM IMPORT CHO BUDGETSCREEN *****
 
 // _StylizedSLogo, HomeScreen, _HomeScreenState, PlaceholderWidget, _HomeContent,
 // _SectionTitle, _WelcomeBanner, _QuickActionsSection, _QuickActionItem,
@@ -75,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const _HomeContent(),
     const HistoryScreen(),
     Container(), // Placeholder for Add Transaction, handled by _onItemTapped
-    const PlaceholderWidget(screenName: 'Ngân sách'),
+    const BudgetScreen(), // ***** THAY THẾ PLACEHOLDER BẰNG BUDGETSCREEN *****
     const SettingsScreen(),
   ];
 
