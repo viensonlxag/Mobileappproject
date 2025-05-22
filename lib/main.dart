@@ -6,18 +6,27 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
 
 import 'providers/app_provider.dart';
-import 'services/notification_service.dart'; // Đảm bảo file này tồn tại và đúng đường dẫn
+// import 'services/notification_service.dart'; // Tạm thời comment nếu chưa chắc chắn
 import 'routes.dart';
-import 'firebase_options.dart';
+import 'firebase_options.dart'; // Đảm bảo tệp này được tạo bởi FlutterFire CLI
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+
+  // Kiểm tra xem Firebase App mặc định đã được khởi tạo chưa
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } else {
+    // Nếu đã khởi tạo, bạn có thể lấy instance mặc định
+    // Firebase.app(); // Hoặc không làm gì cả nếu bạn chắc chắn nó đã đúng
+  }
+
   // Đảm bảo NotificationService.init() không gây lỗi.
   // Bạn có thể comment dòng này nếu file 'services/notification_service.dart' chưa được tạo hoặc có lỗi.
-  // await NotificationService.init();
+  // await NotificationService.init(); // Hãy đảm bảo NotificationService.init() cũng không gọi lại Firebase.initializeApp()
+
   await initializeDateFormatting('vi_VN', null);
   runApp(const ExpenseTrackerApp());
 }
@@ -27,48 +36,40 @@ class ExpenseTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Lấy textTheme mặc định của Flutter làm cơ sở
     final baseTextTheme = Theme.of(context).textTheme;
-    // Áp dụng phông chữ BeVietnamPro cho textTheme cơ sở
     final appTextTheme = GoogleFonts.beVietnamProTextTheme(baseTextTheme).copyWith(
-      // Tùy chỉnh các kiểu văn bản cụ thể nếu cần
       displayLarge: GoogleFonts.beVietnamPro(
         fontSize: baseTextTheme.displayLarge?.fontSize,
-        fontWeight: FontWeight.w700, // Bold hơn
+        fontWeight: FontWeight.w700,
         color: baseTextTheme.displayLarge?.color,
       ),
-      titleLarge: GoogleFonts.beVietnamPro( // Dùng cho AppBar titles
+      titleLarge: GoogleFonts.beVietnamPro(
         fontSize: baseTextTheme.titleLarge?.fontSize ?? 20,
-        fontWeight: FontWeight.w600, // Semi-bold
+        fontWeight: FontWeight.w600,
         color: baseTextTheme.titleLarge?.color,
       ),
-      labelLarge: GoogleFonts.beVietnamPro( // Dùng cho Buttons
+      labelLarge: GoogleFonts.beVietnamPro(
         fontSize: baseTextTheme.labelLarge?.fontSize ?? 15,
-        fontWeight: FontWeight.w600, // Semi-bold
+        fontWeight: FontWeight.w600,
       ),
-      // Bạn có thể thêm các tùy chỉnh khác cho bodyMedium, bodySmall, etc.
     );
 
     return ChangeNotifierProvider(
       create: (_) => AppProvider(),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'S.Budget Tracker', // Tên ứng dụng
+        title: 'S.Budget Tracker',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.pinkAccent),
           useMaterial3: true,
           visualDensity: VisualDensity.adaptivePlatformDensity,
-          // Áp dụng phông chữ và textTheme cho toàn bộ ứng dụng
-          fontFamily: GoogleFonts.beVietnamPro().fontFamily, // Font mặc định
-          textTheme: appTextTheme, // TextTheme đã tùy chỉnh
-
+          fontFamily: GoogleFonts.beVietnamPro().fontFamily,
+          textTheme: appTextTheme,
           appBarTheme: AppBarTheme(
             backgroundColor: Colors.pinkAccent,
             foregroundColor: Colors.white,
             elevation: 0,
-            // titleTextStyle sẽ tự động lấy từ appTextTheme.titleLarge
-            // Nếu muốn ghi đè cụ thể cho AppBar:
-            titleTextStyle: GoogleFonts.beVietnamPro( // Đảm bảo AppBar cũng dùng font này
+            titleTextStyle: GoogleFonts.beVietnamPro(
               color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.w600,
@@ -83,13 +84,11 @@ class ExpenseTrackerApp extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-              // textStyle sẽ lấy từ appTextTheme.labelLarge
             ),
           ),
           textButtonTheme: TextButtonThemeData(
             style: TextButton.styleFrom(
               foregroundColor: Colors.pinkAccent,
-              // textStyle sẽ lấy từ appTextTheme.labelLarge hoặc tương tự
             ),
           ),
           inputDecorationTheme: InputDecorationTheme(
@@ -116,16 +115,13 @@ class ExpenseTrackerApp extends StatelessWidget {
           ),
           listTileTheme: ListTileThemeData(
             iconColor: Colors.pinkAccent.shade200,
-            // Các textStyle của ListTile sẽ tự động kế thừa từ textTheme
           ),
           dialogTheme: DialogTheme(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            // Các textStyle của Dialog sẽ tự động kế thừa từ textTheme
           ),
           bottomNavigationBarTheme: BottomNavigationBarThemeData(
             selectedItemColor: Colors.pinkAccent,
             unselectedItemColor: Colors.grey[600],
-            // Các labelStyle sẽ tự động kế thừa từ textTheme
           ),
         ),
         localizationsDelegates: const [
@@ -138,7 +134,7 @@ class ExpenseTrackerApp extends StatelessWidget {
           Locale('en', 'US'),
         ],
         locale: const Locale('vi', 'VN'),
-        initialRoute: Routes.login,
+        initialRoute: Routes.login, // Hoặc màn hình chờ/AuthWrapper nếu bạn có
         onGenerateRoute: Routes.generateRoute,
       ),
     );

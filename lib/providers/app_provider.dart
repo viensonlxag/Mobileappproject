@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart'; // Import intl cho NumberFormat và DateFormat
-import '../services/auth_service.dart'; // Đảm bảo đường dẫn này đúng
-import '../services/firestore_service.dart'; // Đảm bảo đường dẫn này đúng
-import '../models/expense_transaction.dart'; // Đảm bảo đường dẫn này đúng
-import '../routes.dart'; // Đảm bảo đường dẫn này đúng
+import 'package:intl/intl.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
+import '../models/expense_transaction.dart';
+import '../routes.dart';
 
 class AppProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -13,7 +13,6 @@ class AppProvider extends ChangeNotifier {
   User? _currentUser;
   List<ExpenseTransaction> _transactions = [];
 
-  // --- TRẠNG THÁI TẢI VÀ LỖI ---
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -38,47 +37,40 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  // --- KẾT THÚC TRẠNG THÁI TẢI VÀ LỖI ---
 
   String _userName = "Bạn";
   DateTime? _userDateOfBirth;
 
-  // Cập nhật key để tránh xung đột với dữ liệu cũ nếu cấu trúc thay đổi đáng kể
   static const String _userNameKey = 'app_user_name_v2_4';
   static const String _userDateOfBirthKey = 'app_user_dob_v2_4';
+  static const String _savedEmailKey = 'app_saved_login_email';
+  static const String _savedPasswordKey = 'app_saved_login_password'; // Key mới cho mật khẩu đã lưu
 
   User? get currentUser => _currentUser;
   String get userName => _userName;
   DateTime? get userDateOfBirth => _userDateOfBirth;
   List<ExpenseTransaction> get transactions => List.unmodifiable(_transactions);
 
-  // --- ĐỊNH NGHĨA DANH MỤC CHA VÀ CÁC THUỘC TÍNH CỦA CHÚNG ---
-  // Key: Tên Danh mục cha
-  // Value: Map chứa 'icon', 'color', và 'subCategories' (List<String>)
-  // BẠN CẦN TÙY CHỈNH MAP NÀY CHO PHÙ HỢP VỚI ỨNG DỤNG CỦA MÌNH
-  // Đảm bảo các 'label' trong subCategories khớp với các 'label' bạn dùng trong AddTransactionScreen
+  // ... (Các định nghĩa danh mục cha và getters giữ nguyên) ...
   static final Map<String, Map<String, dynamic>> _parentCategoryDefinitions = {
-    'Chi tiêu sinh hoạt': { // Ví dụ từ hình ảnh bạn gửi
-      'icon': Icons.receipt_long_outlined, // Icon hóa đơn cho sinh hoạt
+    'Chi tiêu sinh hoạt': {
+      'icon': Icons.receipt_long_outlined,
       'color': Colors.orange.shade700,
       'subCategories': ['Ăn uống', 'Di chuyển', 'Hóa đơn', 'Sức khỏe', 'Chợ, siêu thị'],
     },
-    'Chi phí phát sinh': { // Ví dụ từ hình ảnh bạn gửi
-      'icon': Icons.attach_money_rounded, // Icon tiền
+    'Chi phí phát sinh': {
+      'icon': Icons.attach_money_rounded,
       'color': Colors.green.shade600,
-      'subCategories': ['Mua sắm', 'Giải trí'], // Giả sử Mua sắm, Giải trí là chi phí phát sinh
+      'subCategories': ['Mua sắm', 'Giải trí'],
     },
-    'Chi phí cố định': { // Ví dụ từ hình ảnh bạn gửi
-      'icon': Icons.home_rounded, // Icon nhà cửa cho chi phí cố định
+    'Chi phí cố định': {
+      'icon': Icons.home_rounded,
       'color': Colors.blue.shade700,
-      'subCategories': ['Giáo dục'], // Giả sử Giáo dục là chi phí cố định
+      'subCategories': ['Giáo dục'],
     },
-    // Bạn có thể thêm các danh mục cha khác ở đây
   };
-  // Danh mục cha mặc định cho các danh mục con không được map rõ ràng
-  static const String _defaultParentCategory = 'Chưa phân loại'; // Giống hình ảnh của bạn
+  static const String _defaultParentCategory = 'Chưa phân loại';
 
-  // Phương thức tĩnh để lấy icon và màu cho danh mục cha
   static Map<String, dynamic> getParentCategoryVisuals(String parentCategoryName) {
     if (_parentCategoryDefinitions.containsKey(parentCategoryName)) {
       return {
@@ -86,20 +78,17 @@ class AppProvider extends ChangeNotifier {
         'color': _parentCategoryDefinitions[parentCategoryName]!['color'] ?? Colors.grey.shade600,
       };
     }
-    // Mặc định cho _defaultParentCategory hoặc các danh mục cha không xác định
     if (parentCategoryName == _defaultParentCategory) {
       return {
-        'icon': Icons.help_outline_rounded, // Icon dấu hỏi cho "Chưa phân loại"
+        'icon': Icons.help_outline_rounded,
         'color': Colors.blueGrey.shade400,
       };
     }
-    // Trường hợp không mong muốn
     return {
       'icon': Icons.apps_rounded,
       'color': Colors.grey,
     };
   }
-  // Getter tĩnh để truy cập _parentCategoryDefinitions từ bên ngoài (ví dụ: từ CategoryTransactionsScreen)
   static Map<String, Map<String, dynamic>> getParentCategoryDefinitionMap() {
     return _parentCategoryDefinitions;
   }
@@ -116,12 +105,11 @@ class AppProvider extends ChangeNotifier {
       if (_currentUser != null) {
         _firestoreService = FirestoreService(_currentUser!.uid);
         await _loadUserProfile();
-        _listenTransactions(); // Gọi sau khi _loadUserProfile và _firestoreService được thiết lập
+        _listenTransactions();
       } else {
         _firestoreService = null;
         _transactions = [];
         _resetUserProfile();
-        // Không cần gọi _calculateTotals() ở đây vì getters sẽ tự tính khi _transactions rỗng
       }
       _setLoading(false);
     });
@@ -135,9 +123,8 @@ class AppProvider extends ChangeNotifier {
     }
     _firestoreService!.streamTransactions().listen((txList) {
       _transactions = txList;
-      notifyListeners(); // Getters sẽ tự tính toán khi UI build lại
+      notifyListeners();
     }, onError: (error) {
-      print("AppProvider: Lỗi lắng nghe transactions: $error");
       _setError("Không thể tải danh sách giao dịch: ${error.toString()}");
       _transactions = [];
       notifyListeners();
@@ -155,7 +142,6 @@ class AppProvider extends ChangeNotifier {
         _userName = _currentUser!.displayName!;
       }
     } catch (e) {
-      print("AppProvider: Lỗi tải user profile: $e");
       _setError("Lỗi tải thông tin người dùng.");
     }
   }
@@ -181,7 +167,6 @@ class AppProvider extends ChangeNotifier {
         await _currentUser?.updateDisplayName(_userName);
       }
     } catch (e) {
-      print("AppProvider: Lỗi cập nhật displayName trên Firebase: $e");
       _userName = oldName;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_userNameKey, _userName);
@@ -200,7 +185,6 @@ class AppProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_userDateOfBirthKey, _userDateOfBirth!.millisecondsSinceEpoch);
     } catch (e) {
-      print("AppProvider: Lỗi cập nhật ngày sinh: $e");
       _setError("Lỗi cập nhật ngày sinh: ${e.toString()}");
       rethrow;
     } finally {
@@ -208,6 +192,7 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  // --- Getters for financial data (giữ nguyên) ---
   List<ExpenseTransaction> get currentMonthTransactions {
     final now = DateTime.now();
     return _transactions
@@ -255,11 +240,9 @@ class AppProvider extends ChangeNotifier {
 
   Map<String, double> get parentCategoryBreakdown {
     final Map<String, double> parentData = {};
-    // Khởi tạo tất cả các danh mục cha đã định nghĩa với giá trị 0
     for (var parentName in _parentCategoryDefinitions.keys) {
       parentData[parentName] = 0.0;
     }
-    // Khởi tạo cho danh mục cha mặc định nếu nó chưa có trong definitions
     if (!parentData.containsKey(_defaultParentCategory)){
       parentData[_defaultParentCategory] = 0.0;
     }
@@ -276,9 +259,6 @@ class AppProvider extends ChangeNotifier {
             break;
           }
         }
-        // Nếu danh mục con là "Khác" (theo định nghĩa trong AddTransactionScreen)
-        // và nó không được map vào một danh mục cha cụ thể nào ở trên,
-        // thì nó sẽ được gán vào _defaultParentCategory.
         if (tx.category == 'Khác' && !foundParent) {
           parentCategoryName = _defaultParentCategory;
         }
@@ -389,13 +369,14 @@ class AppProvider extends ChangeNotifier {
     return monthlyData;
   }
 
+  // --- AUTH METHODS ---
   Future<void> signIn(String email, String pass) async {
     _setLoading(true);
     clearError();
     try {
       await _authService.signIn(email, pass);
     } catch (e) {
-      _setError("Đăng nhập thất bại: ${e.toString()}");
+      _setError(e.toString());
       rethrow;
     } finally {
       _setLoading(false);
@@ -408,10 +389,33 @@ class AppProvider extends ChangeNotifier {
     try {
       await _authService.register(email, pass);
     } catch (e) {
-      _setError("Đăng ký thất bại: ${e.toString()}");
+      _setError(e.toString());
       rethrow;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<void> signInWithGoogle() async {
+    _setLoading(true);
+    clearError();
+    try {
+      await _authService.signInWithGoogle();
+    } catch (e) {
+      _setError(e.toString());
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    clearError();
+    try {
+      await _authService.sendPasswordResetEmail(email);
+    } catch (e) {
+      _setError(e.toString());
+      rethrow;
     }
   }
 
@@ -420,19 +424,17 @@ class AppProvider extends ChangeNotifier {
     clearError();
     try {
       await _authService.signOut();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil(Routes.login, (Route<dynamic> route) => false);
-        }
-      });
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(Routes.login, (Route<dynamic> route) => false);
+      }
     } catch (e) {
-      print("AppProvider: Lỗi khi đăng xuất: $e");
       _setError("Đăng xuất thất bại: ${e.toString()}");
     } finally {
       _setLoading(false);
     }
   }
 
+  // --- Transaction Methods (giữ nguyên) ---
   Future<void> addTransaction(ExpenseTransaction tx) async {
     if (_firestoreService == null) {
       _setError('User chưa đăng nhập để thêm giao dịch');
@@ -482,5 +484,41 @@ class AppProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  // --- Shared Preferences for "Remember Credentials" ---
+  Future<String?> getSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_savedEmailKey);
+  }
+
+  Future<void> saveEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_savedEmailKey, email);
+  }
+
+  Future<void> clearSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_savedEmailKey);
+  }
+
+  // THÊM MỚI: Các hàm cho lưu/tải/xóa mật khẩu
+  // CẢNH BÁO: LƯU MẬT KHẨU DẠNG TEXT THUẦN LÀ RẤT KHÔNG AN TOÀN
+  Future<String?> getSavedPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_savedPasswordKey);
+  }
+
+  Future<void> savePassword(String password) async {
+    // CẢNH BÁO: Đây là cách lưu trữ mật khẩu không an toàn.
+    // Chỉ sử dụng cho mục đích demo hoặc nếu bạn chấp nhận rủi ro.
+    // Nên sử dụng flutter_secure_storage cho dữ liệu nhạy cảm.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_savedPasswordKey, password);
+  }
+
+  Future<void> clearSavedPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_savedPasswordKey);
   }
 }

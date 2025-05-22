@@ -46,7 +46,8 @@ dependencies:
 
   # Table Calendar (THÊM VÀO DỰA TRÊN MÃ NGUỒN history_screen.dart)
   table_calendar: ^3.1.0 # Phiên bản mới nhất (kiểm tra pub.dev)
-
+  # Google Sign-In (THÊM MỚI)
+  google_sign_in: ^6.3.0 # Kiểm tra phiên bản mới nhất trên pub.dev
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +56,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/ # Hoặc - assets/images/google_logo.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

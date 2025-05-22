@@ -9,6 +9,22 @@ import '../models/expense_transaction.dart';
 import '../utils/category_helper.dart'; // Import tiện ích danh mục
 import '../routes.dart'; // Import Routes để điều hướng khi sửa
 
+// Enum for transaction type filtering
+enum TransactionTypeFilter { all, income, expense }
+
+extension TransactionTypeFilterExtension on TransactionTypeFilter {
+  String get displayName {
+    switch (this) {
+      case TransactionTypeFilter.all:
+        return 'Tất cả';
+      case TransactionTypeFilter.income:
+        return 'Khoản thu';
+      case TransactionTypeFilter.expense:
+        return 'Khoản chi';
+    }
+  }
+}
+
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -17,20 +33,26 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  // CalendarFormat _calendarFormat = CalendarFormat.month; // Không cần nữa nếu chỉ ẩn/hiện
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   late DateTime _firstDay;
   late DateTime _lastDay;
 
   Map<DateTime, _DailySummary> _dailySummaries = {};
-  bool _isCalendarVisible = true; // Trạng thái để ẩn/hiện toàn bộ phần lịch
+  bool _isCalendarVisible = true;
+
+  // State for search and filter
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  TransactionTypeFilter _transactionTypeFilter = TransactionTypeFilter.all;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
     _initializeDateRange();
+    _searchController.addListener(_onSearchChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
@@ -45,7 +67,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (mounted) {
       Provider.of<AppProvider>(context, listen: false).removeListener(_onAppProviderChange);
     }
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (mounted) {
+      setState(() {
+        _searchQuery = _searchController.text;
+      });
+    }
   }
 
   void _onAppProviderChange() {
@@ -129,18 +161,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
     Navigator.pushNamed(context, Routes.addTransaction, arguments: transaction);
   }
 
+  List<ExpenseTransaction> _getFilteredTransactions(List<ExpenseTransaction> allTransactionsInProvider) {
+    List<ExpenseTransaction> transactionsForMonth = allTransactionsInProvider.where((tx) {
+      return tx.date.year == _focusedDay.year && tx.date.month == _focusedDay.month;
+    }).toList();
+
+    if (_transactionTypeFilter == TransactionTypeFilter.income) {
+      transactionsForMonth = transactionsForMonth.where((tx) => tx.amount > 0).toList();
+    } else if (_transactionTypeFilter == TransactionTypeFilter.expense) {
+      transactionsForMonth = transactionsForMonth.where((tx) => tx.amount < 0).toList();
+    }
+
+    if (_searchQuery.isNotEmpty) {
+      transactionsForMonth = transactionsForMonth.where((tx) {
+        final titleMatch = tx.title.toLowerCase().contains(_searchQuery.toLowerCase());
+        final noteMatch = tx.note?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false;
+        return titleMatch || noteMatch;
+      }).toList();
+    }
+
+    transactionsForMonth.sort((a, b) => b.date.compareTo(a.date));
+    return transactionsForMonth;
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final appProvider = Provider.of<AppProvider>(context);
-    final allTransactions = appProvider.transactions;
+    final allTransactionsFromProvider = appProvider.transactions;
 
-    final transactionsForFocusedMonth = allTransactions.where((tx) {
+    final transactionsForFocusedMonthUnfiltered = allTransactionsFromProvider.where((tx) {
       return tx.date.year == _focusedDay.year && tx.date.month == _focusedDay.month;
-    }).toList()..sort((a, b) => b.date.compareTo(a.date));
+    }).toList();
 
     double monthlyIncome = 0;
     double monthlyExpense = 0;
-    for (var tx in transactionsForFocusedMonth) {
+    for (var tx in transactionsForFocusedMonthUnfiltered) {
       if (tx.amount > 0) {
         monthlyIncome += tx.amount;
       } else {
@@ -149,8 +205,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
     double monthlyBalance = monthlyIncome - monthlyExpense;
 
+    final List<ExpenseTransaction> filteredTransactionsForList = _getFilteredTransactions(allTransactionsFromProvider);
+
     final groupedTransactionsForList = groupBy<ExpenseTransaction, DateTime>(
-      transactionsForFocusedMonth,
+      filteredTransactionsForList,
           (transaction) => DateTime(transaction.date.year, transaction.date.month, transaction.date.day),
     );
     final List<MapEntry<DateTime, List<ExpenseTransaction>>> groupedEntriesForList = groupedTransactionsForList.entries.toList();
@@ -159,254 +217,306 @@ class _HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: const Text('Sổ Giao Dịch'),
       ),
-      body: Column(
-        children: [
-          // Phần lịch có thể ẩn/hiện
-          Visibility(
-            visible: _isCalendarVisible,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.chevron_left),
-                            onPressed: () {
-                              setState(() {
-                                _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1, _focusedDay.day);
-                                _updateDailySummaries(allTransactions, _focusedDay);
-                              });
-                            },
-                          ),
-                          Text(
-                            DateFormat.yMMMM('vi_VN').format(_focusedDay),
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              setState(() {
-                                _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1, _focusedDay.day);
-                                _updateDailySummaries(allTransactions, _focusedDay);
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _MonthlySummaryItem(title: 'Tổng thu', amount: monthlyIncome, color: Colors.green.shade700),
-                          _MonthlySummaryItem(title: 'Tổng chi', amount: monthlyExpense, color: Colors.red.shade700),
-                          _MonthlySummaryItem(title: 'Chênh lệch', amount: monthlyBalance, color: monthlyBalance >= 0 ? Colors.blue.shade700 : Colors.orange.shade700),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                TableCalendar<ExpenseTransaction>(
-                  locale: 'vi_VN',
-                  firstDay: _firstDay,
-                  lastDay: _lastDay,
-                  focusedDay: _focusedDay,
-                  calendarFormat: CalendarFormat.month, // Luôn là month khi hiển thị
-                  selectedDayPredicate: (day) {
-                    return isSameDay(_selectedDay, day);
-                  },
-                  onDaySelected: (selectedDay, focusedDay) {
-                    if (!isSameDay(_selectedDay, selectedDay)) {
-                      setState(() {
-                        _selectedDay = selectedDay;
-                        _focusedDay = focusedDay;
-                      });
-                    }
-                  },
-                  onPageChanged: (focusedDay) {
-                    _focusedDay = focusedDay;
-                    _updateDailySummaries(allTransactions, _focusedDay);
-                  },
-                  calendarBuilders: CalendarBuilders(
-                      markerBuilder: (context, date, events) => null,
-                      defaultBuilder: (context, day, focusedDay) {
-                        final summary = _dailySummaries[DateTime(day.year, day.month, day.day)];
-                        final income = summary?.income ?? 0;
-                        final expense = summary?.expense ?? 0;
-                        final dayTextStyle = Theme.of(context).textTheme.bodySmall;
-                        bool isOutside = day.month != focusedDay.month;
-
-                        return Container(
-                          margin: const EdgeInsets.all(1.5),
-                          padding: const EdgeInsets.all(1.5),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${day.day}',
-                                style: dayTextStyle?.copyWith(
-                                  color: isOutside ? Colors.grey.shade400 : (isSameDay(day, DateTime.now()) ? Theme.of(context).primaryColor : Colors.black87),
-                                  fontWeight: isSameDay(day, DateTime.now()) ? FontWeight.bold : FontWeight.normal,
-                                ),
-                              ),
-                              if (!isOutside && income > 0)
-                                Text(
-                                  _formatCurrencyShort(income),
-                                  style: TextStyle(fontSize: 7.5, color: Colors.green.shade600, fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              if (!isOutside && expense > 0)
-                                Text(
-                                  _formatCurrencyShort(expense),
-                                  style: TextStyle(fontSize: 7.5, color: Colors.red.shade600, fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                      selectedBuilder: (context, day, focusedDay) {
-                        final summary = _dailySummaries[DateTime(day.year, day.month, day.day)];
-                        final income = summary?.income ?? 0;
-                        final expense = summary?.expense ?? 0;
-                        return Container(
-                          margin: const EdgeInsets.all(1.5),
-                          padding: const EdgeInsets.all(1.5),
-                          decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4.0),
-                              border: Border.all(color: Theme.of(context).primaryColor, width: 1)
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${day.day}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark),
-                              ),
-                              if (income > 0)
-                                Text(
-                                  _formatCurrencyShort(income),
-                                  style: TextStyle(fontSize: 7.5, color: Colors.green.shade700, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              if (expense > 0)
-                                Text(
-                                  _formatCurrencyShort(expense),
-                                  style: TextStyle(fontSize: 7.5, color: Colors.red.shade600, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                      todayBuilder: (context, day, focusedDay) {
-                        final summary = _dailySummaries[DateTime(day.year, day.month, day.day)];
-                        final income = summary?.income ?? 0;
-                        final expense = summary?.expense ?? 0;
-                        return Container(
-                          margin: const EdgeInsets.all(1.5),
-                          padding: const EdgeInsets.all(1.5),
-                          decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(4.0),
-                              border: Border.all(color: Colors.amber.shade600, width: 1)
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${day.day}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.amber.shade800),
-                              ),
-                              if (income > 0)
-                                Text(
-                                  _formatCurrencyShort(income),
-                                  style: TextStyle(fontSize: 7.5, color: Colors.green.shade600, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              if (expense > 0)
-                                Text(
-                                  _formatCurrencyShort(expense),
-                                  style: TextStyle(fontSize: 7.5, color: Colors.red.shade600, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                            ],
-                          ),
-                        );
-                      }
-                  ),
-                  headerStyle: const HeaderStyle(
-                    formatButtonVisible: false,
-                    titleCentered: true,
-                    titleTextStyle: TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500),
-                    leftChevronVisible: false,
-                    rightChevronVisible: false,
-                    headerPadding: EdgeInsets.symmetric(vertical: 4.0),
-                  ),
-                  calendarStyle: CalendarStyle(
-                    outsideDaysVisible: false,
-                    weekendTextStyle: TextStyle(color: Colors.red.shade400),
-                    cellMargin: const EdgeInsets.all(1.0),
-                  ),
-                  availableCalendarFormats: const { // Chỉ cho phép tháng
-                    CalendarFormat.month: 'Tháng',
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // Nút để ẩn/hiện lịch
-          InkWell(
-            onTap: () {
-              setState(() {
-                _isCalendarVisible = !_isCalendarVisible;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Visibility(
+              visible: _isCalendarVisible,
+              child: Column(
                 children: [
-                  Icon(
-                    _isCalendarVisible ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: Colors.grey[600],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.chevron_left),
+                              onPressed: () {
+                                setState(() {
+                                  _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1, _focusedDay.day);
+                                  _updateDailySummaries(allTransactionsFromProvider, _focusedDay);
+                                });
+                              },
+                            ),
+                            Text(
+                              DateFormat.yMMMM('vi_VN').format(_focusedDay),
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.chevron_right),
+                              onPressed: () {
+                                setState(() {
+                                  _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1, _focusedDay.day);
+                                  _updateDailySummaries(allTransactionsFromProvider, _focusedDay);
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _MonthlySummaryItem(title: 'Tổng thu', amount: monthlyIncome, color: Colors.green.shade700),
+                            _MonthlySummaryItem(title: 'Tổng chi', amount: monthlyExpense, color: Colors.red.shade700),
+                            _MonthlySummaryItem(title: 'Chênh lệch', amount: monthlyBalance, color: monthlyBalance >= 0 ? Colors.blue.shade700 : Colors.orange.shade700),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  TableCalendar<ExpenseTransaction>(
+                    locale: 'vi_VN',
+                    firstDay: _firstDay,
+                    lastDay: _lastDay,
+                    focusedDay: _focusedDay,
+                    calendarFormat: CalendarFormat.month,
+                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                    onDaySelected: (selectedDay, focusedDay) {
+                      if (!isSameDay(_selectedDay, selectedDay)) {
+                        setState(() {
+                          _selectedDay = selectedDay;
+                          _focusedDay = focusedDay;
+                        });
+                      }
+                    },
+                    onPageChanged: (newFocusedDay) {
+                      if (_focusedDay.month != newFocusedDay.month || _focusedDay.year != newFocusedDay.year) {
+                        setState(() {
+                          _focusedDay = newFocusedDay;
+                          _updateDailySummaries(allTransactionsFromProvider, _focusedDay);
+                        });
+                      }
+                    },
+                    calendarBuilders: CalendarBuilders(
+                        markerBuilder: (context, date, events) => null,
+                        defaultBuilder: (context, day, focusedDay) {
+                          final summary = _dailySummaries[DateTime(day.year, day.month, day.day)];
+                          final income = summary?.income ?? 0;
+                          final expense = summary?.expense ?? 0;
+                          final dayTextStyle = Theme.of(context).textTheme.bodySmall;
+                          bool isOutside = day.month != focusedDay.month;
+
+                          return Container(
+                            margin: const EdgeInsets.all(1.5),
+                            padding: const EdgeInsets.all(1.5),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${day.day}',
+                                  style: dayTextStyle?.copyWith(
+                                    color: isOutside ? Colors.grey.shade400 : (isSameDay(day, DateTime.now()) ? Theme.of(context).primaryColor : Colors.black87),
+                                    fontWeight: isSameDay(day, DateTime.now()) ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                                if (!isOutside && income > 0)
+                                  Text(
+                                    _formatCurrencyShort(income),
+                                    style: TextStyle(fontSize: 7.5, color: Colors.green.shade600, fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (!isOutside && expense > 0)
+                                  Text(
+                                    _formatCurrencyShort(expense),
+                                    style: TextStyle(fontSize: 7.5, color: Colors.red.shade600, fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                        selectedBuilder: (context, day, focusedDay) {
+                          final summary = _dailySummaries[DateTime(day.year, day.month, day.day)];
+                          final income = summary?.income ?? 0;
+                          final expense = summary?.expense ?? 0;
+                          return Container(
+                            margin: const EdgeInsets.all(1.5),
+                            padding: const EdgeInsets.all(1.5),
+                            decoration: BoxDecoration(
+                                color: Theme.of(context).primaryColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4.0),
+                                border: Border.all(color: Theme.of(context).primaryColor, width: 1)
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${day.day}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark),
+                                ),
+                                if (income > 0)
+                                  Text(
+                                    _formatCurrencyShort(income),
+                                    style: TextStyle(fontSize: 7.5, color: Colors.green.shade700, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (expense > 0)
+                                  Text(
+                                    _formatCurrencyShort(expense),
+                                    style: TextStyle(fontSize: 7.5, color: Colors.red.shade600, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                        todayBuilder: (context, day, focusedDay) {
+                          final summary = _dailySummaries[DateTime(day.year, day.month, day.day)];
+                          final income = summary?.income ?? 0;
+                          final expense = summary?.expense ?? 0;
+                          return Container(
+                            margin: const EdgeInsets.all(1.5),
+                            padding: const EdgeInsets.all(1.5),
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(4.0),
+                                border: Border.all(color: Colors.amber.shade600, width: 1)
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${day.day}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.amber.shade800),
+                                ),
+                                if (income > 0)
+                                  Text(
+                                    _formatCurrencyShort(income),
+                                    style: TextStyle(fontSize: 7.5, color: Colors.green.shade600, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (expense > 0)
+                                  Text(
+                                    _formatCurrencyShort(expense),
+                                    style: TextStyle(fontSize: 7.5, color: Colors.red.shade600, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          );
+                        }
+                    ),
+                    headerStyle: const HeaderStyle(
+                      formatButtonVisible: false,
+                      titleCentered: true,
+                      titleTextStyle: TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500),
+                      leftChevronVisible: false,
+                      rightChevronVisible: false,
+                      headerPadding: EdgeInsets.symmetric(vertical: 4.0),
+                    ),
+                    calendarStyle: CalendarStyle(
+                      outsideDaysVisible: false,
+                      weekendTextStyle: TextStyle(color: Colors.red.shade400),
+                      cellMargin: const EdgeInsets.all(1.0),
+                    ),
+                    availableCalendarFormats: const {
+                      CalendarFormat.month: 'Tháng',
+                    },
                   ),
                 ],
               ),
             ),
-          ),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Divider(height: 1, thickness: 1, color: Colors.grey[300]),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 12.0, bottom: 4.0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                "Danh sách giao dịch (${DateFormat.MMMM('vi_VN').format(_focusedDay)})",
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _isCalendarVisible = !_isCalendarVisible;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _isCalendarVisible ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                      color: Colors.grey[600],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: transactionsForFocusedMonth.isEmpty
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Tìm kiếm theo tên, ghi chú...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap( // ***** ĐÃ THAY Row BẰNG Wrap CHO FilterChip *****
+                    spacing: 8.0, // Khoảng cách ngang giữa các chip
+                    runSpacing: 4.0, // Khoảng cách dọc giữa các dòng chip
+                    alignment: WrapAlignment.center, // Căn giữa các chip trên mỗi dòng
+                    children: TransactionTypeFilter.values.map((filter) {
+                      return FilterChip(
+                        label: Text(filter.displayName, style: TextStyle(color: _transactionTypeFilter == filter ? Theme.of(context).primaryColorDark : Colors.black87)),
+                        selectedColor: Theme.of(context).primaryColorLight.withOpacity(0.5),
+                        checkmarkColor: Theme.of(context).primaryColorDark,
+                        selected: _transactionTypeFilter == filter,
+                        onSelected: (selected) {
+                          setState(() {
+                            _transactionTypeFilter = filter;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Divider(height: 1, thickness: 1, color: Colors.grey[300]),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 12.0, bottom: 4.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _buildTransactionListTitle(filteredTransactionsForList.length),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+
+            filteredTransactionsForList.isEmpty
                 ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
-                  'Không có giao dịch nào trong tháng ${DateFormat.MMMM('vi_VN').format(_focusedDay)}.',
+                  _buildEmptyListMessage(),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                   textAlign: TextAlign.center,
                 ),
               ),
             )
                 : ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 80.0, top: 0.0),
               itemCount: groupedEntriesForList.length,
               itemBuilder: (ctx, groupIndex) {
@@ -424,7 +534,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            DateFormat('EEEE, dd MMMM, yyyy', 'vi_VN').format(date),
+                            DateFormat('EEEE, dd MMMM, yyyy', 'vi_VN').format(date), // Sửa lại định dạng ngày tháng
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Colors.grey[700],
@@ -463,10 +573,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 );
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  String _buildTransactionListTitle(int count) {
+    String monthStr = DateFormat.MMMM('vi_VN').format(_focusedDay);
+    if (_transactionTypeFilter != TransactionTypeFilter.all || _searchQuery.isNotEmpty) {
+      return "Kết quả ($count) trong $monthStr";
+    }
+    return "Giao dịch ($count) trong $monthStr";
+  }
+
+  String _buildEmptyListMessage() {
+    String monthStr = DateFormat.MMMM('vi_VN').format(_focusedDay);
+    if (_transactionTypeFilter != TransactionTypeFilter.all || _searchQuery.isNotEmpty) {
+      return 'Không tìm thấy giao dịch nào khớp với bộ lọc trong $monthStr.';
+    }
+    return 'Không có giao dịch nào trong $monthStr.';
   }
 }
 
