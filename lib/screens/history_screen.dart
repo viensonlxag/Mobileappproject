@@ -64,9 +64,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   void dispose() {
-    if (mounted) {
-      Provider.of<AppProvider>(context, listen: false).removeListener(_onAppProviderChange);
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    try {
+      appProvider.removeListener(_onAppProviderChange);
+    } catch (e) {
+      debugPrint("Error removing listener from AppProvider in dispose: $e");
     }
+
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
@@ -84,7 +88,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (mounted) {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       _updateDailySummaries(appProvider.transactions, _focusedDay);
-      setState(() {});
+      // ***** LOẠI BỎ SETSTATE Ở ĐÂY *****
+      // setState(() {});
+      // AppProvider.notifyListeners() sẽ trigger rebuild cho các widget đang listen (như Consumer/Selector hoặc Provider.of(context) trong build).
+      // _updateDailySummaries đã có setState riêng cho phần calendar.
     }
   }
 
@@ -115,10 +122,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, ExpenseTransaction transaction) async {
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
-    return showDialog<void>(
-      context: context,
+  Future<bool?> _confirmDeleteDialog(BuildContext parentContext, ExpenseTransaction transaction) async {
+    return showDialog<bool>(
+      context: parentContext,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
@@ -129,26 +135,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
             TextButton(
               child: const Text('Hủy'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                Navigator.of(dialogContext).pop(false);
               },
             ),
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
               child: const Text('Xóa'),
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                try {
-                  await appProvider.deleteTransaction(transaction.id);
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Lỗi khi xóa giao dịch: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
               },
             ),
           ],
@@ -189,6 +183,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final appProvider = Provider.of<AppProvider>(context);
     final allTransactionsFromProvider = appProvider.transactions;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
 
     final transactionsForFocusedMonthUnfiltered = allTransactionsFromProvider.where((tx) {
       return tx.date.year == _focusedDay.year && tx.date.month == _focusedDay.month;
@@ -466,10 +462,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Wrap( // ***** ĐÃ THAY Row BẰNG Wrap CHO FilterChip *****
-                    spacing: 8.0, // Khoảng cách ngang giữa các chip
-                    runSpacing: 4.0, // Khoảng cách dọc giữa các dòng chip
-                    alignment: WrapAlignment.center, // Căn giữa các chip trên mỗi dòng
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 4.0,
+                    alignment: WrapAlignment.center,
                     children: TransactionTypeFilter.values.map((filter) {
                       return FilterChip(
                         label: Text(filter.displayName, style: TextStyle(color: _transactionTypeFilter == filter ? Theme.of(context).primaryColorDark : Colors.black87)),
@@ -534,7 +530,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            DateFormat('EEEE, dd MMMM, yyyy', 'vi_VN').format(date), // Sửa lại định dạng ngày tháng
+                            DateFormat('EEEE, dd MMMM, yyyy', 'vi_VN').format(date), // Hiển thị đầy đủ năm
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Colors.grey[700],
@@ -562,8 +558,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           final transaction = dailyTransactions[itemIndex];
                           return _TransactionListItem(
                             transaction: transaction,
-                            onDelete: () => _confirmDelete(context, transaction),
                             onEdit: () => _navigateToEditScreen(context, transaction),
+                            confirmDeleteDialog: () => _confirmDeleteDialog(context, transaction),
+                            scaffoldMessenger: scaffoldMessenger,
+                            appProvider: appProvider,
                           );
                         },
                         separatorBuilder: (ctx, idx) => const Divider(height: 0.5, indent: 72, endIndent: 16),
@@ -636,13 +634,18 @@ String _formatCurrencyShort(double amount) {
 
 class _TransactionListItem extends StatelessWidget {
   final ExpenseTransaction transaction;
-  final VoidCallback onDelete;
   final VoidCallback onEdit;
+  final Future<bool?> Function() confirmDeleteDialog;
+  final ScaffoldMessengerState scaffoldMessenger;
+  final AppProvider appProvider;
+
 
   const _TransactionListItem({
     required this.transaction,
-    required this.onDelete,
     required this.onEdit,
+    required this.confirmDeleteDialog,
+    required this.scaffoldMessenger,
+    required this.appProvider,
   });
 
   @override
@@ -656,8 +659,25 @@ class _TransactionListItem extends StatelessWidget {
     return Dismissible(
       key: ValueKey(transaction.id),
       direction: DismissDirection.endToStart,
-      onDismissed: (direction) {
-        onDelete();
+      confirmDismiss: (DismissDirection direction) async {
+        return await confirmDeleteDialog();
+      },
+      onDismissed: (DismissDirection direction) async {
+        try {
+          await appProvider.deleteTransaction(transaction.id);
+        } catch (e) {
+          debugPrint('Lỗi khi xóa giao dịch trong onDismissed: $e');
+          try {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text('Lỗi khi xóa giao dịch: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          } catch (snackbarError) {
+            debugPrint("Lỗi khi hiển thị SnackBar sau khi xóa: $snackbarError");
+          }
+        }
       },
       background: Container(
         color: Colors.red.shade600,
