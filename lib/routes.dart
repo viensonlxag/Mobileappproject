@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
-import '../screens/login_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/home_screen.dart';   // Đảm bảo đường dẫn đúng, chứa enum CategoryDetailType
-import '../screens/add_transaction_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/history_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/settings_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/user_profile_screen.dart'; // Đảm bảo đường dẫn đúng
-import '../screens/category_transactions_screen.dart'; // THÊM IMPORT NÀY
-import '../models/expense_transaction.dart'; // THÊM IMPORT NÀY
+import '../screens/login_screen.dart';
+import '../screens/home_screen.dart';
+import '../screens/add_transaction_screen.dart';
+import '../screens/history_screen.dart';
+import '../screens/settings_screen.dart';
+import '../screens/user_profile_screen.dart';
+import '../screens/category_transactions_screen.dart';
+import '../models/expense_transaction.dart';
+import '../screens/category_analysis_screen.dart'; // ***** THÊM IMPORT NÀY *****
 
 class Routes {
   static const String login = '/login';
   static const String home = '/home';
-  static const String addTransaction = '/add-transaction'; // Dùng cho cả Thêm và Sửa
+  static const String addTransaction = '/add-transaction';
   static const String history = '/history';
   static const String settings = '/settings';
   static const String userProfile = '/user-profile';
-  static const String categoryTransactions = '/category-transactions'; // THÊM ROUTE NÀY
+  static const String categoryTransactions = '/category-transactions';
+  static const String categoryAnalysis = '/category-analysis'; // ***** THÊM ROUTE MỚI *****
 
   static Route<dynamic> generateRoute(RouteSettings routeSettings) {
     switch (routeSettings.name) {
@@ -25,11 +27,10 @@ class Routes {
         return MaterialPageRoute(builder: (_) => const HomeScreen());
       case Routes.addTransaction:
         final ExpenseTransaction? transactionToEdit;
-        // Kiểm tra xem arguments có được truyền và có đúng kiểu ExpenseTransaction không
         if (routeSettings.arguments != null && routeSettings.arguments is ExpenseTransaction) {
           transactionToEdit = routeSettings.arguments as ExpenseTransaction?;
         } else {
-          transactionToEdit = null; // Nếu không có argument hoặc sai kiểu, coi như thêm mới
+          transactionToEdit = null;
         }
         return MaterialPageRoute(
           builder: (_) => AddTransactionScreen(existingTransaction: transactionToEdit),
@@ -46,17 +47,19 @@ class Routes {
           return MaterialPageRoute(
             builder: (_) => CategoryTransactionsScreen(
               categoryName: args['categoryName'] as String,
-              categoryType: args['categoryType'] as CategoryDetailType, // Lấy enum từ home_screen.dart
+              categoryType: args['categoryType'] as CategoryDetailType,
             ),
           );
         }
-        // Trả về trang lỗi nếu không có arguments hợp lệ
         return MaterialPageRoute(
           builder: (_) => Scaffold(
             appBar: AppBar(title: const Text("Lỗi")),
             body: const Center(child: Text('Thiếu thông tin danh mục để hiển thị chi tiết.')),
           ),
         );
+    // ***** THÊM CASE CHO ROUTE MỚI *****
+      case Routes.categoryAnalysis:
+        return MaterialPageRoute(builder: (_) => const CategoryAnalysisScreen());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

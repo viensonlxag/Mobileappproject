@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'dart:math' as math;
+// import 'dart:math' as math; // Unused import
 
 import '../providers/app_provider.dart';
 import '../routes.dart';
@@ -10,12 +10,14 @@ import '../screens/history_screen.dart';
 import '../screens/settings_screen.dart';
 import '../utils/category_helper.dart';
 import 'category_transactions_screen.dart';
-import 'budget_screen.dart'; // ***** THÊM IMPORT CHO BUDGETSCREEN *****
+import 'budget_screen.dart';
+import 'category_analysis_screen.dart'; // Import màn hình phân tích
+
+// ***** DI CHUYỂN ENUM RA NGOÀI CLASS *****
+enum CategoryDetailType { subCategory, parentCategory }
 
 // _StylizedSLogo, HomeScreen, _HomeScreenState, PlaceholderWidget, _HomeContent,
-// _SectionTitle, _WelcomeBanner, _QuickActionsSection, _QuickActionItem,
-// _OverviewSection, _InfoCard giữ nguyên như phiên bản trước.
-// Chỉ phần _CategoryPieChartSection được sửa đổi.
+// _SectionTitle, _WelcomeBanner, _OverviewSection, _InfoCard giữ nguyên
 
 class _StylizedSLogo extends StatelessWidget {
   final Color backgroundColor;
@@ -76,12 +78,12 @@ class _HomeScreenState extends State<HomeScreen> {
     const _HomeContent(),
     const HistoryScreen(),
     Container(), // Placeholder for Add Transaction, handled by _onItemTapped
-    const BudgetScreen(), // ***** THAY THẾ PLACEHOLDER BẰNG BUDGETSCREEN *****
+    const BudgetScreen(),
     const SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
-    if (index == 2) {
+    if (index == 2) { // Nút Ghi chép (Add)
       Navigator.pushNamed(context, Routes.addTransaction);
     } else {
       setState(() {
@@ -95,9 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _selectedIndex = 0;
       });
-      return false;
+      return false; // Ngăn không cho thoát app, quay về tab Tổng quan
     }
-    return true;
+    return true; // Cho phép thoát app nếu đang ở tab Tổng quan
   }
 
   @override
@@ -109,11 +111,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        appBar: _selectedIndex == 0
+        appBar: _selectedIndex == 0 // Chỉ hiển thị AppBar cho tab Tổng quan
             ? AppBar(
           backgroundColor: appBarTheme.backgroundColor,
           foregroundColor: appBarForegroundColor,
-          automaticallyImplyLeading: false,
+          automaticallyImplyLeading: false, // Không hiển thị nút back mặc định
           elevation: appBarTheme.elevation,
           title: Row(
             children: [
@@ -125,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                'Budget',
+                'Budget', // Hoặc tên ứng dụng của bạn
                 style: TextStyle(
                   fontFamily: titleFontFamily,
                   color: appBarForegroundColor,
@@ -148,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
           ],
         )
-            : null,
+            : null, // Không hiển thị AppBar cho các tab khác
         body: IndexedStack(
           index: _selectedIndex,
           children: _widgetOptions,
@@ -156,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed,
+          type: BottomNavigationBarType.fixed, // Để tất cả các label đều hiển thị
           items: [
             const BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -240,8 +242,7 @@ class _HomeContent extends StatelessWidget {
             const SizedBox(height: 12),
             const _OverviewSection(),
             const SizedBox(height: 16),
-            // _SectionTitle cho "Phân bổ chi tiêu" đã được chuyển vào trong _CategoryPieChartSection
-            const _CategoryPieChartSection(), // Biểu đồ và danh sách chi tiết ở đây
+            const _CategoryPieChartSection(),
             const SizedBox(height: 60),
           ],
         ),
@@ -348,12 +349,10 @@ class _QuickActionsSection extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12.0),
         children: [
           _QuickActionItem(
-            icon: Icons.category_outlined,
-            label: 'Phân loại',
+            icon: Icons.insights_rounded,
+            label: 'Phân tích',
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tính năng Phân loại sắp ra mắt!')),
-              );
+              Navigator.pushNamed(context, Routes.categoryAnalysis);
             },
             color: Colors.orangeAccent,
           ),
@@ -445,7 +444,7 @@ class _OverviewSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
-    final currencyFormatter = NumberFormat("#,##0đ", "vi_VN");
+    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
     const TextStyle defaultTextStyle = TextStyle();
 
     return Container(
@@ -548,7 +547,7 @@ class _InfoCard extends StatelessWidget {
 // --- WIDGET BIỂU ĐỒ (PIE & BAR) VÀ DANH SÁCH CHI TIẾT DANH MỤC ---
 enum ChartType { pie, bar }
 enum BarChartPeriod { daily, monthly }
-enum CategoryDetailType { subCategory, parentCategory }
+// CategoryDetailType đã được chuyển ra ngoài
 
 class _CategoryPieChartSection extends StatefulWidget {
   const _CategoryPieChartSection();
@@ -748,16 +747,15 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     final int intValue = value.toInt();
 
     if (period == BarChartPeriod.daily) {
-      // Chỉ hiển thị tiêu đề nếu giá trị hiện tại là một trong các ngày được vẽ biểu đồ
       if (dailyKeysToDisplay.contains(intValue)) {
         text = intValue.toString();
       }
-    } else { // Monthly
+    } else {
       final monthIndex = value.toInt();
       if (monthIndex >= 0 && monthIndex < monthKeys.length) {
-        if (monthKeys.length <= 3 ) { // Nếu có 3 tháng hoặc ít hơn, hiển thị tất cả
+        if (monthKeys.length <= 3 ) {
           text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
-        } else { // Nếu nhiều hơn 3 tháng, hiển thị tháng đầu, cuối và giữa
+        } else {
           if (monthIndex == 0 || monthIndex == monthKeys.length - 1 || monthIndex == (monthKeys.length / 2).floor()) {
             text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
           }
@@ -788,9 +786,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     }
 
     final double interval = meta.appliedInterval;
-    // Hiển thị nhãn nếu giá trị là bội số của khoảng chia, hoặc rất gần bội số
     if (value > meta.min && value <= meta.max && ( (value % interval).abs() < 0.01 * interval || ((interval - (value % interval).abs()) < 0.01 * interval )) ) {
-      // Tránh vẽ đè nhãn max nếu nó quá gần nhãn trước đó
       if (value == meta.max && (meta.max - (value - interval)).abs() < interval * 0.5 && meta.max != value) {
         return const SizedBox.shrink();
       }
@@ -798,7 +794,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
         axisSide: meta.axisSide,
         space: 4,
         child: Text(
-            numberFormatter.format(value / 1000000), // Chia cho 1 triệu
+            numberFormatter.format(value / 1000000),
             style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])
         ),
       );
@@ -809,57 +805,53 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
 
   Widget _buildBarChart(BuildContext context, AppProvider appProvider) {
     Map<int, double> dataForChartIntKeys = {};
-    List<int> dailyXValuesToPlot = []; // Lưu các ngày thực tế được vẽ cho biểu đồ ngày
+    List<int> dailyXValuesToPlot = [];
     double maxY = 0;
     final textTheme = Theme.of(context).textTheme;
-    // final now = DateTime.now(); // Không cần nữa nếu không dùng daysInMonth ở đây
 
     final List<MapEntry<String,double>> recentMonthlyExpenses = appProvider.getRecentMonthlyExpenses(numberOfMonths: 3);
     final List<String> recentMonthKeys = recentMonthlyExpenses.map((e) => e.key).toList();
 
 
     if (_selectedBarChartPeriod == BarChartPeriod.daily) {
-      // Lấy tất cả chi tiêu hàng ngày trong tháng hiện tại, sắp xếp theo ngày
       List<MapEntry<int, double>> sortedDailyExpenses = appProvider.dailyExpensesCurrentMonth.entries.toList()
         ..sort((a, b) => a.key.compareTo(b.key));
 
-      // Lấy 6 ngày cuối cùng có chi tiêu
       List<MapEntry<int, double>> lastSixActiveDays = sortedDailyExpenses.length > 6
           ? sortedDailyExpenses.sublist(sortedDailyExpenses.length - 6)
           : sortedDailyExpenses;
 
       dataForChartIntKeys = Map.fromEntries(lastSixActiveDays);
-      dailyXValuesToPlot = dataForChartIntKeys.keys.toList(); // Lưu các key (ngày) sẽ được vẽ
+      dailyXValuesToPlot = dataForChartIntKeys.keys.toList();
 
       if (dataForChartIntKeys.isNotEmpty) {
         maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
       }
-      maxY = (maxY == 0) ? 50000 : (maxY * 1.3).ceilToDouble(); // Đảm bảo maxY không quá nhỏ
+      maxY = (maxY == 0) ? 50000 : (maxY * 1.3).ceilToDouble();
 
     } else { // Monthly
       for(int i=0; i < recentMonthlyExpenses.length; i++){
-        // Sử dụng index i làm key cho dataForChartIntKeys để BarChartGroupData có x từ 0 đến N-1
         dataForChartIntKeys[i] = recentMonthlyExpenses[i].value;
       }
       if (dataForChartIntKeys.isNotEmpty) {
         maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
       }
       maxY = (maxY == 0) ? 1000000 : (maxY * 1.3).ceilToDouble();
-      if (maxY < 500000 && maxY > 0) maxY = 500000; // Đảm bảo thang đo hợp lý
+      if (maxY < 500000 && maxY > 0) maxY = 500000;
     }
 
     List<BarChartGroupData> barGroups = [];
 
     if (_selectedBarChartPeriod == BarChartPeriod.daily) {
-      barGroups = dailyXValuesToPlot.map((dayKey) { // Sử dụng dailyXValuesToPlot đã được lọc và sắp xếp
+      barGroups = dailyXValuesToPlot.map((dayKey) {
         Color barColor = Theme.of(context).colorScheme.primary.withOpacity(0.85);
         return BarChartGroupData(
-          x: dayKey, // Sử dụng ngày thực tế làm giá trị x
+          x: dayKey,
           barRods: [
             BarChartRodData(
               toY: dataForChartIntKeys[dayKey]!,
               color: barColor,
-              width: 22, // Tăng độ rộng cột cho biểu đồ ngày
+              width: 22,
               borderRadius: const BorderRadius.all(Radius.circular(5)),
             )
           ],
@@ -868,16 +860,16 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     } else { // Monthly
       barGroups = List.generate(recentMonthlyExpenses.length, (i) {
         Color barColor = (Theme.of(context).colorScheme.primaryContainer).withOpacity(0.6);
-        if (i == recentMonthlyExpenses.length - 1) { // Tháng hiện tại
+        if (i == recentMonthlyExpenses.length - 1) {
           barColor = Theme.of(context).colorScheme.primary;
         }
         return BarChartGroupData(
-          x: i, // Sử dụng index làm giá trị x cho tháng
+          x: i,
           barRods: [
             BarChartRodData(
               toY: recentMonthlyExpenses[i].value,
               color: barColor,
-              width: 36, // Độ rộng cột cho biểu đồ tháng
+              width: 36,
               borderRadius: const BorderRadius.all(Radius.circular(5)),
             )
           ],
@@ -913,9 +905,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       String title;
                       if (_selectedBarChartPeriod == BarChartPeriod.daily) {
-                        title = 'Ngày ${group.x.toInt()}'; // group.x giờ là ngày thực tế
-                      } else { // Monthly
-                        // group.x là index (0, 1, 2), cần lấy tên tháng từ recentMonthKeys
+                        title = 'Ngày ${group.x.toInt()}';
+                      } else {
                         title = (group.x.toInt() >=0 && group.x.toInt() < recentMonthKeys.length)
                             ? recentMonthKeys[group.x.toInt()]
                             : 'Tháng ${group.x.toInt() +1}';
@@ -946,10 +937,9 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      // Truyền dailyXValuesToPlot vào _getBottomTitleWidgets
                       getTitlesWidget: (value, meta) => _getBottomTitleWidgets(value, meta, _selectedBarChartPeriod, context, recentMonthKeys, dailyXValuesToPlot),
                       reservedSize: 28,
-                      interval: 1, // Để fl_chart gọi getTitlesWidget cho mỗi giá trị nguyên
+                      interval: 1,
                     ),
                   ),
                   leftTitles: AxisTitles(
@@ -969,7 +959,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                   horizontalInterval: maxY > 0 ? (maxY / 4).ceilToDouble() : 100000,
                 ),
                 barGroups: barGroups,
-                alignment: BarChartAlignment.spaceAround, // Giúp các cột cách đều nhau
+                alignment: BarChartAlignment.spaceAround,
               ),
               swapAnimationDuration: const Duration(milliseconds: 300),
               swapAnimationCurve: Curves.easeInOut,
@@ -979,8 +969,6 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
       ),
     );
   }
-
-  // int daysInMonth(int year, int month) => DateUtils.getDaysInMonth(year, month); // Không còn sử dụng trực tiếp ở đây
 
   Widget _buildChartToggleButtons(BuildContext context) {
     final theme = Theme.of(context);
@@ -1054,7 +1042,7 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
         : appProvider.parentCategoryBreakdown;
 
     final textTheme = Theme.of(context).textTheme;
-    final currencyFormatter = NumberFormat("#,##0đ", "vi_VN");
+    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0); // Sửa lại formatter
 
     if (dataMap.isEmpty) {
       return Padding(
@@ -1207,7 +1195,6 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     } else { // Bar Chart
       bool noBarData = false;
       if (_selectedBarChartPeriod == BarChartPeriod.daily) {
-        // Kiểm tra xem có dữ liệu cho 6 ngày cuối không
         List<MapEntry<int, double>> sortedDailyExpenses = appProvider.dailyExpensesCurrentMonth.entries.toList()
           ..sort((a, b) => a.key.compareTo(b.key));
         List<MapEntry<int, double>> lastSixActiveDays = sortedDailyExpenses.length > 6
@@ -1291,4 +1278,3 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     );
   }
 }
-
