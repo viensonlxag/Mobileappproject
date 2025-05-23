@@ -8,8 +8,7 @@ import '../screens/user_profile_screen.dart';
 import '../screens/category_transactions_screen.dart';
 import '../models/expense_transaction.dart';
 import '../screens/category_analysis_screen.dart';
-import '../screens/notifications_screen.dart'; // ***** THÊM IMPORT NÀY *****
-
+import '../screens/notifications_screen.dart';
 
 class Routes {
   static const String login = '/login';
@@ -20,7 +19,7 @@ class Routes {
   static const String userProfile = '/user-profile';
   static const String categoryTransactions = '/category-transactions';
   static const String categoryAnalysis = '/category-analysis';
-  static const String notifications = '/notifications'; // ***** THÊM ROUTE MỚI *****
+  static const String notifications = '/notifications';
 
 
   static Route<dynamic> generateRoute(RouteSettings routeSettings) {
@@ -51,7 +50,6 @@ class Routes {
           return MaterialPageRoute(
             builder: (_) => CategoryTransactionsScreen(
               categoryName: args['categoryName'] as String,
-              // Đảm bảo CategoryDetailType được import đúng cách từ home_screen.dart hoặc nơi nó được định nghĩa
               categoryType: args['categoryType'] as CategoryDetailType,
             ),
           );
@@ -65,10 +63,9 @@ class Routes {
       case Routes.categoryAnalysis:
         return MaterialPageRoute(builder: (_) => const CategoryAnalysisScreen());
 
-    // ***** THÊM CASE CHO ROUTE MỚI *****
       case Routes.notifications:
-        final String? payload = routeSettings.arguments as String?;
-        return MaterialPageRoute(builder: (_) => NotificationsScreen(payload: payload));
+      // final String? payload = routeSettings.arguments as String?; // Không cần truyền payload nữa
+        return MaterialPageRoute(builder: (_) => const NotificationsScreen()); // ***** BỎ TRUYỀN PAYLOAD *****
 
       default:
         return MaterialPageRoute(

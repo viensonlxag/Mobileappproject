@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln; // Import với prefix
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import '../routes.dart';
@@ -10,6 +10,7 @@ class NotificationService {
 
   static GlobalKey<NavigatorState>? navigatorKey;
 
+  // --- Kênh Thông báo cho Android ---
   static const String _dailyReminderChannelId = 'daily_reminder_channel';
   static const String _dailyReminderChannelName = 'Nhắc nhở Hàng ngày';
   static const String _dailyReminderChannelDescription = 'Thông báo nhắc nhở chi tiêu và tổng kết hàng ngày.';
@@ -29,12 +30,13 @@ class NotificationService {
     tz.setLocalLocation(tz.local);
 
     const fln.AndroidInitializationSettings androidSettings =
-    fln.AndroidInitializationSettings('@mipmap/ic_launcher');
+    fln.AndroidInitializationSettings('@mipmap/ic_launcher'); // Đảm bảo icon này tồn tại
 
     const fln.DarwinInitializationSettings darwinSettings = fln.DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
+      // onDidReceiveLocalNotification đã được loại bỏ vì onDidReceiveNotificationResponse thường xử lý được
     );
 
     const fln.InitializationSettings initSettings = fln.InitializationSettings(
@@ -54,7 +56,7 @@ class NotificationService {
         fln.AndroidFlutterLocalNotificationsPlugin>();
     if (androidImplementation != null) {
       await _createNotificationChannels(androidImplementation);
-      await androidImplementation.requestNotificationsPermission();
+      await androidImplementation.requestNotificationsPermission(); // Cho Android 13+
     }
 
     await _notifications
@@ -78,8 +80,8 @@ class NotificationService {
       _budgetAlertChannelId,
       _budgetAlertChannelName,
       description: _budgetAlertChannelDescription,
-      importance: fln.Importance.max,
-      // sound: const fln.RawResourceAndroidNotificationSound('custom_alert_sound'),
+      importance: fln.Importance.max, // Cảnh báo nên có độ ưu tiên cao
+      // sound: const fln.RawResourceAndroidNotificationSound('custom_alert_sound'), // Nếu có file âm thanh
     );
     final periodicChannel = fln.AndroidNotificationChannel(
       _periodicReminderChannelId,
@@ -106,6 +108,7 @@ class NotificationService {
     final String? payload = response.payload;
     if (payload != null && payload.isNotEmpty) {
       debugPrint('Notification tapped (terminated): $payload');
+      // Xử lý payload khi app được mở từ thông báo lúc bị tắt.
     }
   }
 
@@ -117,6 +120,7 @@ class NotificationService {
     }
   }
 
+  /// Thông báo tức thì (ví dụ: cảnh báo ngân sách)
   static Future<void> showBudgetAlert({
     required int id,
     required String title,
@@ -151,13 +155,14 @@ class NotificationService {
     }
   }
 
+  /// Thông báo định kỳ hàng ngày
   static Future<void> scheduleDailyReminder({
     required int id,
     required String title,
     required String body,
-    required int hour, // ***** THAY THÀNH INT *****
-    required int minute, // ***** THAY THÀNH INT *****
-    int second = 0,    // ***** THAY THÀNH INT (OPTIONAL) *****
+    required int hour,
+    required int minute,
+    int second = 0,
     String payload = 'daily_reminder_payload',
   }) async {
     final tz.TZDateTime scheduledDate = _nextInstanceOfTime(hour, minute, second);
@@ -192,14 +197,15 @@ class NotificationService {
     }
   }
 
+  /// Thông báo định kỳ hàng tuần
   static Future<void> scheduleWeeklyReminder({
     required int id,
     required String title,
     required String body,
-    required int hour,    // ***** THAY THÀNH INT *****
-    required int minute,  // ***** THAY THÀNH INT *****
-    int second = 0,     // ***** THAY THÀNH INT (OPTIONAL) *****
-    required List<int> daysOfWeek, // ***** THAY THÀNH List<int> (1=Monday ... 7=Sunday) *****
+    required int hour,
+    required int minute,
+    int second = 0,
+    required List<int> daysOfWeek, // Nhận List<int> (1=Monday ... 7=Sunday)
     String payload = 'weekly_reminder_payload',
   }) async {
     if (daysOfWeek.isEmpty) {
@@ -211,8 +217,6 @@ class NotificationService {
         debugPrint("Invalid day value for weekly reminder: $dayValue. Must be 1-7.");
         continue;
       }
-      // Chuyển đổi int (1-7) thành fln.Day nếu cần thiết bên trong _nextInstanceOfDayAndTime
-      // Hoặc _nextInstanceOfDayAndTime sẽ xử lý trực tiếp int
       final tz.TZDateTime scheduledDate = _nextInstanceOfDayAndTime(dayValue, hour, minute, second);
       final int uniqueId = id + dayValue;
 
@@ -239,13 +243,14 @@ class NotificationService {
     }
   }
 
+  /// Thông báo định kỳ hàng tháng
   static Future<void> scheduleMonthlyReminder({
     required int id,
     required String title,
     required String body,
-    required int hour,     // ***** THAY THÀNH INT *****
-    required int minute,   // ***** THAY THÀNH INT *****
-    int second = 0,      // ***** THAY THÀNH INT (OPTIONAL) *****
+    required int hour,
+    required int minute,
+    int second = 0,
     required int dayOfMonth,
     String payload = 'monthly_reminder_payload',
   }) async {
@@ -277,6 +282,7 @@ class NotificationService {
     }
   }
 
+  // --- Helper methods for scheduling ---
   static tz.TZDateTime _nextInstanceOfTime(int hour, int minute, int second) {
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
     tz.TZDateTime scheduledDate = tz.TZDateTime(
@@ -289,7 +295,7 @@ class NotificationService {
 
   static tz.TZDateTime _nextInstanceOfDayAndTime(int dayValue, int hour, int minute, int second) {
     tz.TZDateTime scheduledDate = _nextInstanceOfTime(hour, minute, second);
-    while (scheduledDate.weekday != dayValue) { // DateTime.weekday (1=Monday, 7=Sunday)
+    while (scheduledDate.weekday != dayValue) {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
     return scheduledDate;
@@ -302,17 +308,13 @@ class NotificationService {
     try {
       scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, dayOfMonth, hour, minute, second);
     } catch (e) {
-      // Nếu ngày không hợp lệ cho tháng hiện tại (ví dụ ngày 31 tháng 2),
-      // đặt lịch vào ngày cuối cùng của tháng đó.
       final lastDayOfMonth = tz.TZDateTime(tz.local, now.year, now.month + 1, 0);
       scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, lastDayOfMonth.day, hour, minute, second);
     }
 
-    // Nếu ngày đã qua trong tháng này, hoặc ngày không hợp lệ, lên lịch cho tháng tiếp theo
     if (scheduledDate.isBefore(now) || scheduledDate.day != dayOfMonth) {
       int year = now.year;
       int month = now.month + 1;
-      // Lặp để tìm tháng hợp lệ có ngày dayOfMonth
       while (true) {
         if (month > 12) {
           month = 1;
@@ -320,27 +322,29 @@ class NotificationService {
         }
         try {
           scheduledDate = tz.TZDateTime(tz.local, year, month, dayOfMonth, hour, minute, second);
-          // Nếu tạo được ngày hợp lệ và nó sau thời điểm hiện tại, thì dùng ngày này
           if (scheduledDate.day == dayOfMonth && !scheduledDate.isBefore(now)) {
             break;
           }
-          // Nếu tạo được ngày hợp lệ nhưng nó trước now (nghĩa là ngày đó của tháng sau vẫn trước now)
-          // thì cần nhảy tiếp sang tháng sau nữa
           if (scheduledDate.day == dayOfMonth && scheduledDate.isBefore(now)){
             month++;
             continue;
           }
-          // Nếu ngày không hợp lệ (ví dụ 31/2) thì nó sẽ throw exception và đi vào catch
         } catch (e) {
-          // Ngày không hợp lệ cho tháng này, thử tháng tiếp theo
+          // Ngày không hợp lệ, thử tháng tiếp theo
         }
         month++;
-        if (year > now.year + 2) break; // Giới hạn tìm kiếm để tránh vòng lặp vô hạn
+        if (year > now.year + 2) { // Giới hạn để tránh vòng lặp vô hạn
+          // Nếu không tìm thấy ngày hợp lệ trong 2 năm tới, có thể đặt vào ngày cuối của tháng gần nhất
+          final lastDayOfSafeMonth = tz.TZDateTime(tz.local, year, month, 0);
+          scheduledDate = tz.TZDateTime(tz.local, year, month-1, lastDayOfSafeMonth.day, hour, minute, second);
+          break;
+        }
       }
     }
     return scheduledDate;
   }
 
+  // --- Utility methods ---
   static Future<void> cancelNotification(int id) async {
     await _notifications.cancel(id);
     debugPrint('Canceled notification id $id');

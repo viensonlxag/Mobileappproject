@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln; // Không cần import fln.Day ở đây nữa
+// import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln; // Không cần thiết ở đây nếu NotificationService đã xử lý
 
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../models/expense_transaction.dart';
 import '../models/budget.dart';
+import '../models/app_notification.dart';
 import '../routes.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -17,16 +18,19 @@ class AppProvider extends ChangeNotifier {
   User? _currentUser;
   List<ExpenseTransaction> _transactions = [];
   List<Budget> _budgets = [];
+  List<AppNotification> _appNotifications = [];
 
   bool _isLoading = false;
   String? _errorMessage;
 
   final Map<String, DateTime> _notifiedBudgetAlerts = {};
-  static const Duration _minIntervalBetweenAlerts = Duration(hours: 24);
+  static const Duration _minIntervalBetweenAlerts = Duration(hours: 1);
 
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  List<AppNotification> get appNotifications => List.unmodifiable(_appNotifications);
+
 
   void _setLoading(bool loading) {
     _isLoading = loading;
@@ -116,10 +120,12 @@ class AppProvider extends ChangeNotifier {
         await _loadUserProfile();
         _listenTransactions();
         _listenBudgets();
+        _listenAppNotifications();
       } else {
         _firestoreService = null;
         _transactions = [];
         _budgets = [];
+        _appNotifications = [];
         _resetUserProfile();
       }
       _setLoading(false);
@@ -159,6 +165,23 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     });
   }
+
+  void _listenAppNotifications() {
+    if (_firestoreService == null) {
+      _appNotifications = [];
+      notifyListeners();
+      return;
+    }
+    _firestoreService!.streamAppNotifications().listen((notificationList) {
+      _appNotifications = notificationList;
+      notifyListeners();
+    }, onError: (error) {
+      _setError("Không thể tải danh sách thông báo: ${error.toString()}");
+      _appNotifications = [];
+      notifyListeners();
+    });
+  }
+
 
   Future<void> _loadUserProfile() async {
     if (_currentUser == null) return;
@@ -564,6 +587,34 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  // ***** NOTIFICATION RELATED METHODS *****
+
+  Future<void> _saveAndDisplayNotification({
+    required String title,
+    required String body,
+    required AppNotificationType type,
+    required String originalPayload,
+    int? localNotificationId,
+  }) async {
+    if (_firestoreService == null) return;
+
+    final appNotif = AppNotification(
+      id: '',
+      title: title,
+      body: body,
+      timestamp: DateTime.now(),
+      type: type,
+      originalPayload: originalPayload,
+      isRead: false,
+    );
+    try {
+      await _firestoreService!.addAppNotification(appNotif);
+    } catch (e) {
+      debugPrint("Lỗi khi lưu thông báo vào Firestore: $e");
+    }
+  }
+
+
   Future<void> checkAndNotifyForBudgets() async {
     if (_budgets.isEmpty || _transactions.isEmpty) return;
     final now = DateTime.now();
@@ -627,23 +678,31 @@ class AppProvider extends ChangeNotifier {
 
       if (spendingPercentage >= 1.0) {
         if (_canNotify(notificationKeyOver)) {
+          final title = 'Cảnh báo: Vượt Ngân Sách!';
+          final body = 'Bạn đã vượt ngân sách cho "${budget.name}". Đã chi: ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)}';
+          final payload = 'budget_alert:over:${budget.id}';
           await NotificationService.showBudgetAlert(
             id: budget.id.hashCode,
-            title: 'Cảnh báo: Vượt Ngân Sách!',
-            body: 'Bạn đã vượt ngân sách cho "${budget.name}". Đã chi: ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)}',
-            payload: 'budget_alert:over:${budget.id}',
+            title: title,
+            body: body,
+            payload: payload,
           );
+          await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.budgetAlert, originalPayload: payload);
           _markAsNotified(notificationKeyOver);
           _markAsNotified(notificationKeyNear);
         }
       } else if (spendingPercentage >= 0.8) {
         if (_canNotify(notificationKeyNear)) {
+          final title = 'Cảnh báo: Ngân Sách Sắp Hết!';
+          final body = 'Chi tiêu cho "${budget.name}" đã đạt ${(spendingPercentage * 100).toStringAsFixed(0)}% ngân sách. (${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)})';
+          final payload = 'budget_alert:near:${budget.id}';
           await NotificationService.showBudgetAlert(
             id: budget.id.hashCode + 1,
-            title: 'Cảnh báo: Ngân Sách Sắp Hết!',
-            body: 'Chi tiêu cho "${budget.name}" đã đạt ${(spendingPercentage * 100).toStringAsFixed(0)}% ngân sách. (${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)})',
-            payload: 'budget_alert:near:${budget.id}',
+            title: title,
+            body: body,
+            payload: payload,
           );
+          await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.budgetAlert, originalPayload: payload);
           _markAsNotified(notificationKeyNear);
         }
       }
@@ -663,43 +722,92 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> scheduleDailyAppReminder(int hour, int minute) async {
+    final title = 'Nhắc nhở hàng ngày';
+    final body = 'Đừng quên ghi lại các chi tiêu của bạn hôm nay nhé!';
+    final payload = 'daily_reminder_payload:${DateTime.now().millisecondsSinceEpoch}';
     await NotificationService.scheduleDailyReminder(
         id: 1,
-        title: 'Nhắc nhở hàng ngày',
-        body: 'Đừng quên ghi lại các chi tiêu của bạn hôm nay nhé!',
+        title: title,
+        body: body,
         hour: hour,
         minute: minute,
-        payload: 'daily_reminder_payload'
+        payload: payload
     );
+    // Quyết định có lưu thông báo này vào Firestore hay không
+    // await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.dailyReminder, originalPayload: payload);
   }
 
   Future<void> scheduleWeeklyAppReminder(List<int> daysOfWeek, int hour, int minute) async {
+    final title = 'Nhắc nhở hàng tuần';
+    final body = 'Xem lại tổng kết chi tiêu tuần này và lên kế hoạch cho tuần tới!';
+    final payload = 'weekly_reminder_payload:${DateTime.now().millisecondsSinceEpoch}';
     await NotificationService.scheduleWeeklyReminder(
         id: 2,
-        title: 'Nhắc nhở hàng tuần',
-        body: 'Xem lại tổng kết chi tiêu tuần này và lên kế hoạch cho tuần tới!',
+        title: title,
+        body: body,
         daysOfWeek: daysOfWeek,
         hour: hour,
         minute: minute,
-        payload: 'weekly_reminder_payload'
+        payload: payload
     );
+    // await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.weeklyReminder, originalPayload: payload);
   }
 
   Future<void> scheduleMonthlyAppReminder(int dayOfMonth, int hour, int minute) async {
+    final title = 'Nhắc nhở hàng tháng';
+    final body = 'Đã đến lúc xem lại ngân sách và chi tiêu tháng này rồi!';
+    final payload = 'monthly_reminder_payload:${DateTime.now().millisecondsSinceEpoch}';
     await NotificationService.scheduleMonthlyReminder(
         id: 3,
-        title: 'Nhắc nhở hàng tháng',
-        body: 'Đã đến lúc xem lại ngân sách và chi tiêu tháng này rồi!',
+        title: title,
+        body: body,
         dayOfMonth: dayOfMonth,
         hour: hour,
         minute: minute,
-        payload: 'monthly_reminder_payload'
+        payload: payload
     );
+    // await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.monthlyReminder, originalPayload: payload);
   }
 
   Future<void> cancelAllAppNotifications() async {
     await NotificationService.cancelAllNotifications();
   }
+
+  Future<void> markAppNotificationAsRead(String notificationId) async {
+    if (_firestoreService == null) return;
+    try {
+      await _firestoreService!.markNotificationAsRead(notificationId);
+    } catch (e) {
+      _setError("Lỗi đánh dấu thông báo đã đọc: $e");
+    }
+  }
+
+  Future<void> deleteAppNotification(String notificationId) async {
+    if (_firestoreService == null) return;
+    _setLoading(true);
+    clearError();
+    try {
+      await _firestoreService!.deleteAppNotification(notificationId);
+    } catch (e) {
+      _setError("Lỗi xóa thông báo: $e");
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> deleteAllReadAppNotifications() async {
+    if (_firestoreService == null) return;
+    _setLoading(true);
+    clearError();
+    try {
+      await _firestoreService!.deleteAllReadAppNotifications();
+    } catch (e) {
+      _setError("Lỗi xóa các thông báo đã đọc: $e");
+    } finally {
+      _setLoading(false);
+    }
+  }
+
 
   Future<String?> getSavedEmail() async {
     final prefs = await SharedPreferences.getInstance();
@@ -730,4 +838,5 @@ class AppProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_savedPasswordKey);
   }
+
 }
