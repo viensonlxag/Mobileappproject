@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln; // Không cần thiết ở đây nếu NotificationService đã xử lý
+// import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
@@ -26,10 +27,25 @@ class AppProvider extends ChangeNotifier {
   final Map<String, DateTime> _notifiedBudgetAlerts = {};
   static const Duration _minIntervalBetweenAlerts = Duration(hours: 1);
 
+  // --- Cài đặt Thông báo ---
+  bool _dailyReminderEnabled = false;
+  int _dailyReminderHour = 20;
+  int _dailyReminderMinute = 0;
+
+  static const String _dailyReminderEnabledKey = 'pref_daily_reminder_enabled';
+  static const String _dailyReminderHourKey = 'pref_daily_reminder_hour';
+  static const String _dailyReminderMinuteKey = 'pref_daily_reminder_minute';
+  static const int dailyReminderId = 101;
+
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   List<AppNotification> get appNotifications => List.unmodifiable(_appNotifications);
+  bool get dailyReminderEnabled => _dailyReminderEnabled;
+  TimeOfDay get dailyReminderTime => TimeOfDay(hour: _dailyReminderHour, minute: _dailyReminderMinute);
+  // ***** THÊM GETTERS PUBLIC *****
+  int get dailyReminderHour => _dailyReminderHour;
+  int get dailyReminderMinute => _dailyReminderMinute;
 
 
   void _setLoading(bool loading) {
@@ -193,14 +209,33 @@ class AppProvider extends ChangeNotifier {
       if (_userName == "Bạn" && _currentUser?.displayName != null && _currentUser!.displayName!.isNotEmpty) {
         _userName = _currentUser!.displayName!;
       }
+
+      _dailyReminderEnabled = prefs.getBool(_dailyReminderEnabledKey) ?? false;
+      _dailyReminderHour = prefs.getInt(_dailyReminderHourKey) ?? 20;
+      _dailyReminderMinute = prefs.getInt(_dailyReminderMinuteKey) ?? 0;
+
+      if (_dailyReminderEnabled) {
+        await NotificationService.scheduleDailyReminder(
+          id: dailyReminderId,
+          title: 'Sổ Thu Chi Nhắc Nhở',
+          body: 'Đừng quên ghi chép chi tiêu hôm nay bạn nhé!',
+          hour: _dailyReminderHour,
+          minute: _dailyReminderMinute,
+        );
+      }
     } catch (e) {
-      _setError("Lỗi tải thông tin người dùng.");
+      _setError("Lỗi tải thông tin người dùng hoặc cài đặt thông báo.");
+      debugPrint("Error loading user profile/notification settings: $e");
     }
   }
 
   void _resetUserProfile() {
     _userName = "Bạn";
     _userDateOfBirth = null;
+    _dailyReminderEnabled = false;
+    _dailyReminderHour = 20;
+    _dailyReminderMinute = 0;
+    NotificationService.cancelAllNotifications();
   }
 
   Future<void> updateUserName(String newName) async {
@@ -242,6 +277,33 @@ class AppProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<void> updateDailyReminderSetting({required bool enabled, int? hour, int? minute}) async {
+    _setLoading(true);
+    _dailyReminderEnabled = enabled;
+    if (hour != null) _dailyReminderHour = hour;
+    if (minute != null) _dailyReminderMinute = minute;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_dailyReminderEnabledKey, _dailyReminderEnabled);
+    await prefs.setInt(_dailyReminderHourKey, _dailyReminderHour);
+    await prefs.setInt(_dailyReminderMinuteKey, _dailyReminderMinute);
+
+    if (_dailyReminderEnabled) {
+      await NotificationService.scheduleDailyReminder(
+        id: dailyReminderId,
+        title: 'Sổ Thu Chi Nhắc Nhở',
+        body: 'Đến giờ ghi chép chi tiêu hàng ngày rồi!',
+        hour: _dailyReminderHour,
+        minute: _dailyReminderMinute,
+      );
+      debugPrint("Đã lên lịch nhắc nhở hàng ngày lúc $_dailyReminderHour:$_dailyReminderMinute");
+    } else {
+      await NotificationService.cancelNotification(dailyReminderId);
+      debugPrint("Đã hủy nhắc nhở hàng ngày.");
+    }
+    _setLoading(false);
   }
 
   List<ExpenseTransaction> get currentMonthTransactions {
@@ -587,8 +649,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // ***** NOTIFICATION RELATED METHODS *****
-
   Future<void> _saveAndDisplayNotification({
     required String title,
     required String body,
@@ -680,14 +740,22 @@ class AppProvider extends ChangeNotifier {
         if (_canNotify(notificationKeyOver)) {
           final title = 'Cảnh báo: Vượt Ngân Sách!';
           final body = 'Bạn đã vượt ngân sách cho "${budget.name}". Đã chi: ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)}';
-          final payload = 'budget_alert:over:${budget.id}';
+          final Map<String, dynamic> payloadData = {
+            'type': NotificationPayloadType.budgetAlert,
+            'title': title,
+            'body': body,
+            'budgetId': budget.id,
+            'alertType': 'over_limit',
+            'timestamp': DateTime.now().toIso8601String(),
+          };
           await NotificationService.showBudgetAlert(
-            id: budget.id.hashCode,
-            title: title,
-            body: body,
-            payload: payload,
+              id: budget.id.hashCode,
+              title: title,
+              body: body,
+              budgetId: budget.id,
+              alertType: 'over_limit'
           );
-          await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.budgetAlert, originalPayload: payload);
+          await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.budgetAlert, originalPayload: jsonEncode(payloadData));
           _markAsNotified(notificationKeyOver);
           _markAsNotified(notificationKeyNear);
         }
@@ -695,14 +763,22 @@ class AppProvider extends ChangeNotifier {
         if (_canNotify(notificationKeyNear)) {
           final title = 'Cảnh báo: Ngân Sách Sắp Hết!';
           final body = 'Chi tiêu cho "${budget.name}" đã đạt ${(spendingPercentage * 100).toStringAsFixed(0)}% ngân sách. (${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)})';
-          final payload = 'budget_alert:near:${budget.id}';
+          final Map<String, dynamic> payloadData = {
+            'type': NotificationPayloadType.budgetAlert,
+            'title': title,
+            'body': body,
+            'budgetId': budget.id,
+            'alertType': 'near_limit',
+            'timestamp': DateTime.now().toIso8601String(),
+          };
           await NotificationService.showBudgetAlert(
-            id: budget.id.hashCode + 1,
-            title: title,
-            body: body,
-            payload: payload,
+              id: budget.id.hashCode + 1,
+              title: title,
+              body: body,
+              budgetId: budget.id,
+              alertType: 'near_limit'
           );
-          await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.budgetAlert, originalPayload: payload);
+          await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.budgetAlert, originalPayload: jsonEncode(payloadData));
           _markAsNotified(notificationKeyNear);
         }
       }
@@ -724,49 +800,39 @@ class AppProvider extends ChangeNotifier {
   Future<void> scheduleDailyAppReminder(int hour, int minute) async {
     final title = 'Nhắc nhở hàng ngày';
     final body = 'Đừng quên ghi lại các chi tiêu của bạn hôm nay nhé!';
-    final payload = 'daily_reminder_payload:${DateTime.now().millisecondsSinceEpoch}';
     await NotificationService.scheduleDailyReminder(
-        id: 1,
-        title: title,
-        body: body,
-        hour: hour,
-        minute: minute,
-        payload: payload
+      id: dailyReminderId,
+      title: title,
+      body: body,
+      hour: hour,
+      minute: minute,
     );
-    // Quyết định có lưu thông báo này vào Firestore hay không
-    // await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.dailyReminder, originalPayload: payload);
   }
 
   Future<void> scheduleWeeklyAppReminder(List<int> daysOfWeek, int hour, int minute) async {
     final title = 'Nhắc nhở hàng tuần';
     final body = 'Xem lại tổng kết chi tiêu tuần này và lên kế hoạch cho tuần tới!';
-    final payload = 'weekly_reminder_payload:${DateTime.now().millisecondsSinceEpoch}';
     await NotificationService.scheduleWeeklyReminder(
-        id: 2,
-        title: title,
-        body: body,
-        daysOfWeek: daysOfWeek,
-        hour: hour,
-        minute: minute,
-        payload: payload
+      id: 200,
+      title: title,
+      body: body,
+      daysOfWeek: daysOfWeek,
+      hour: hour,
+      minute: minute,
     );
-    // await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.weeklyReminder, originalPayload: payload);
   }
 
   Future<void> scheduleMonthlyAppReminder(int dayOfMonth, int hour, int minute) async {
     final title = 'Nhắc nhở hàng tháng';
     final body = 'Đã đến lúc xem lại ngân sách và chi tiêu tháng này rồi!';
-    final payload = 'monthly_reminder_payload:${DateTime.now().millisecondsSinceEpoch}';
     await NotificationService.scheduleMonthlyReminder(
-        id: 3,
-        title: title,
-        body: body,
-        dayOfMonth: dayOfMonth,
-        hour: hour,
-        minute: minute,
-        payload: payload
+      id: 300,
+      title: title,
+      body: body,
+      dayOfMonth: dayOfMonth,
+      hour: hour,
+      minute: minute,
     );
-    // await _saveAndDisplayNotification(title: title, body: body, type: AppNotificationType.monthlyReminder, originalPayload: payload);
   }
 
   Future<void> cancelAllAppNotifications() async {
