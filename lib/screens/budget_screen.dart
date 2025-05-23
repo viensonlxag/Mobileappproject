@@ -88,7 +88,7 @@ class BudgetDisplayItem {
       cycleEndDateToConsider = this.endDate;
     }
 
-    if (now.isAfter(cycleEndDateToConsider.copyWith(hour: 23, minute: 59, second: 59))) return 0;
+    if (now.isAfter(cycleEndDateToConsider.copyWith(hour: 23, minute: 59, second: 59, millisecond: 999, microsecond: 999))) return 0;
 
     final nowDateOnly = DateTime(now.year, now.month, now.day);
     final endDateOnly = DateTime(cycleEndDateToConsider.year, cycleEndDateToConsider.month, cycleEndDateToConsider.day);
@@ -109,46 +109,58 @@ class BudgetDisplayItem {
       final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
 
       if (!(model.endDate.isBefore(firstDayOfCurrentMonth) || model.startDate.isAfter(lastDayOfCurrentMonth))) {
-        periodStartForSpent = DateTime(now.year, now.month, model.startDate.day);
-        if (periodStartForSpent.month != now.month) {
+        try {
+          periodStartForSpent = DateTime(now.year, now.month, model.startDate.day);
+        } catch (e) {
           periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
         }
 
-        if (model.endDate.day >= model.startDate.day || (model.startDate.month == model.endDate.month && model.startDate.year == model.endDate.year)) {
-          periodEndForSpent = DateTime(now.year, now.month, model.endDate.day, 23, 59, 59, 999);
-          if (periodEndForSpent.month != now.month) {
+        if (model.endDate.day >= model.startDate.day ||
+            (model.startDate.month == model.endDate.month && model.startDate.year == model.endDate.year)) {
+          try {
+            periodEndForSpent = DateTime(now.year, now.month, model.endDate.day, 23, 59, 59, 999);
+          } catch (e) {
             periodEndForSpent = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
           }
         } else {
           if (now.day < model.startDate.day) {
-            periodStartForSpent = DateTime(now.year, now.month -1, model.startDate.day);
-            if (periodStartForSpent.month == now.month && now.month != 1) periodStartForSpent = DateTime(now.year, now.month-1, DateTime(now.year, now.month, 0).day);
-            else if (periodStartForSpent.month != 12 && now.month ==1) periodStartForSpent = DateTime(now.year-1, 12, model.startDate.day);
+            try {
+              periodStartForSpent = DateTime(now.year, now.month -1, model.startDate.day);
+              if (periodStartForSpent.month == now.month && now.month !=1) periodStartForSpent = DateTime(now.year, now.month-1, DateTime(now.year, now.month, 0).day);
+              else if (periodStartForSpent.month != 12 && now.month ==1) periodStartForSpent = DateTime(now.year-1, 12, model.startDate.day);
 
-
-            periodEndForSpent = DateTime(now.year, now.month, model.endDate.day, 23, 59, 59, 999);
-            if (periodEndForSpent.month != now.month) periodEndForSpent = DateTime(now.year, now.month+1,0,23,59,59,999);
+            } catch (e) {
+              periodStartForSpent = DateTime(now.year, now.month -1, DateTime(now.year, now.month, 0).day);
+            }
+            try {
+              periodEndForSpent = DateTime(now.year, now.month, model.endDate.day, 23, 59, 59, 999);
+            } catch (e) {
+              periodEndForSpent = DateTime(now.year, now.month + 1, 0,23,59,59,999);
+            }
 
           } else {
-            periodStartForSpent = DateTime(now.year, now.month, model.startDate.day);
-            if (periodStartForSpent.month != now.month) periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
-
-            periodEndForSpent = DateTime(now.year, now.month + 1, model.endDate.day, 23, 59, 59, 999);
-            if (periodEndForSpent.month != (now.month + 1 > 12 ? (now.month+1)%12 : now.month+1) ) {
-              periodEndForSpent = DateTime(now.year, (now.month+1 > 12 ? now.month+2 : now.month+2),0,23,59,59,999);
-              if (periodEndForSpent.year > now.year +1) periodEndForSpent = DateTime(now.year+1, 1,0,23,59,59,999);
+            try {
+              periodStartForSpent = DateTime(now.year, now.month, model.startDate.day);
+            } catch (e) {
+              periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
+            }
+            try {
+              periodEndForSpent = DateTime(now.year, now.month + 1, model.endDate.day, 23, 59, 59, 999);
+              if (periodEndForSpent.month != (now.month + 1 > 12 ? (now.month+1)%12 == 0 ? 12 : (now.month+1)%12 : now.month+1) ) {
+                periodEndForSpent = DateTime(now.year, (now.month+1 > 12 ? (now.month+2 > 12 ? (now.month+2)%12 == 0 ? 12 : (now.month+2)%12 : now.month+2) : now.month+2),0,23,59,59,999);
+                if (periodEndForSpent.year > now.year +1) periodEndForSpent = DateTime(now.year+1, 1,0,23,59,59,999);
+              }
+            } catch (e) {
+              periodEndForSpent = DateTime(now.year, now.month + 2, 0,23,59,59,999);
             }
           }
         }
         if(periodStartForSpent.isBefore(model.startDate)) periodStartForSpent = model.startDate;
         if(periodEndForSpent.isAfter(model.endDate)) periodEndForSpent = model.endDate.copyWith(hour:23, minute:59, second:59, millisecond: 999);
-
-
       } else {
         periodStartForSpent = now.add(const Duration(days:1));
         periodEndForSpent = now;
       }
-
     } else {
       periodStartForSpent = model.startDate;
       periodEndForSpent = model.endDate.copyWith(hour: 23, minute: 59, second: 59, millisecond: 999);
@@ -220,17 +232,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
     if (_selectedPeriod == BudgetPeriodFilter.thisMonth) {
       tempFilteredBudgets = allDisplayBudgets.where((b) {
         if (b.isRecurring) {
-          DateTime cycleStartForCurrentMonth = DateTime(now.year, now.month, b.startDate.day);
-          if (cycleStartForCurrentMonth.month != now.month) {
-            cycleStartForCurrentMonth = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
+          DateTime cycleStartDateForCurrentMonth;
+          try {
+            cycleStartDateForCurrentMonth = DateTime(now.year, now.month, b.startDate.day);
+          } catch (e) {
+            cycleStartDateForCurrentMonth = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
           }
-          DateTime cycleEndForCurrentMonth = DateTime(now.year, now.month, b.endDate.day);
-          if (cycleEndForCurrentMonth.month != now.month) {
-            cycleEndForCurrentMonth = DateTime(now.year, now.month + 1, 0);
+
+          DateTime cycleEndDateForCurrentMonth;
+          try {
+            cycleEndDateForCurrentMonth = DateTime(now.year, now.month, b.endDate.day);
+          } catch (e) {
+            cycleEndDateForCurrentMonth = DateTime(now.year, now.month + 1, 0);
           }
-          return !cycleStartForCurrentMonth.isAfter(b.endDate) && !cycleEndForCurrentMonth.isBefore(b.startDate);
+          return !cycleStartDateForCurrentMonth.isAfter(b.endDate) && !cycleEndDateForCurrentMonth.isBefore(b.startDate);
         } else {
-          return !(lastDayCurrentMonth.isBefore(b.startDate) || firstDayCurrentMonth.isAfter(b.endDate));
+          return !(lastDayCurrentMonth.isBefore(b.startDate) || firstDayCurrentMonth.isAfter(b.endDate.copyWith(hour: 23, minute: 59, second: 59, millisecond: 999)));
         }
       }).toList();
     } else if (_selectedPeriod == BudgetPeriodFilter.allTime) {
@@ -257,16 +274,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
   bool listEquals<T>(List<T> a, List<T> b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        if (a[i] is BudgetDisplayItem && b[i] is BudgetDisplayItem) {
-          if ((a[i] as BudgetDisplayItem).id != (b[i] as BudgetDisplayItem).id ||
-              (a[i] as BudgetDisplayItem).spent != (b[i] as BudgetDisplayItem).spent ||
-              (a[i] as BudgetDisplayItem).amount != (b[i] as BudgetDisplayItem).amount) {
-            return false;
-          }
-        } else {
+      if (a[i] is BudgetDisplayItem && b[i] is BudgetDisplayItem) {
+        final budgetA = a[i] as BudgetDisplayItem;
+        final budgetB = b[i] as BudgetDisplayItem;
+        if (budgetA.id != budgetB.id ||
+            budgetA.spent != budgetB.spent ||
+            budgetA.amount != budgetB.amount ||
+            budgetA.name != budgetB.name ||
+            budgetA.isRecurring != budgetB.isRecurring ) {
           return false;
         }
+      } else if (a[i] != b[i]) {
+        return false;
       }
     }
     return true;
@@ -281,8 +300,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       ),
     );
     if (result == true && mounted) {
-      // No need to call _filterAndCalculateBudgets here,
-      // Consumer and didChangeDependencies will handle it.
+      // Consumer and didChangeDependencies will handle the update
     }
   }
 
@@ -344,17 +362,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
           appBar: AppBar(
             title: const Text('Quản lý Ngân sách'),
           ),
-          body: Column(
-            children: [
-              _buildOverallSummary(theme),
-              _buildPeriodFilterChips(theme, appProvider),
-              const Divider(height: 1, thickness: 1.2),
-              Expanded(
-                child: appProvider.isLoading && _filteredBudgets.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
+          // ***** THAY Column BẰNG SingleChildScrollView *****
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildOverallSummary(theme),
+                _buildPeriodFilterChips(theme, appProvider),
+                const Divider(height: 1, thickness: 1.2),
+                // ***** THAY Expanded BẰNG Column VÀ CẤU HÌNH ListView.builder *****
+                appProvider.isLoading && _filteredBudgets.isEmpty
+                    ? const Center(child: Padding(padding: EdgeInsets.all(32.0), child:CircularProgressIndicator()))
                     : _filteredBudgets.isEmpty
                     ? _buildEmptyState(theme)
                     : ListView.builder(
+                  shrinkWrap: true, // ***** THÊM shrinkWrap *****
+                  physics: const NeverScrollableScrollPhysics(), // ***** THÊM physics *****
                   padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 80.0),
                   itemCount: _filteredBudgets.length,
                   itemBuilder: (context, index) {
@@ -374,8 +396,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     return _buildBudgetListItem(budgetItem, originalBudgetModel, theme);
                   },
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _navigateToAddEditBudgetScreen(),
@@ -392,7 +414,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
     double overallProgress = _overallBudgetedAmount > 0 ? (_overallSpentAmount / _overallBudgetedAmount).clamp(0.0, 1.0) : 0.0;
     bool isOverallOverBudget = _overallSpentAmount > _overallBudgetedAmount;
     Color overallProgressColor = isOverallOverBudget ? Colors.red.shade700 : theme.colorScheme.secondary;
-    // String centerText = _overallBudgetedAmount > 0 ? '${(overallProgress * 100).toStringAsFixed(0)}%' : 'N/A'; // Không dùng nữa
 
     List<PieChartSectionData> sections = [];
     if (_overallBudgetedAmount > 0) {
@@ -681,7 +702,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        daysLeft > 0 ? '$daysLeft ngày còn lại' : (daysLeft == 0 && !now.isAfter(budgetItem.endDate) ? 'Hôm nay' : 'Đã kết thúc'),
+                        daysLeft > 0 ? '$daysLeft ngày còn lại' : (daysLeft == 0 && !now.isAfter(budgetItem.endDate.copyWith(hour: 23, minute: 59, second: 59))) ? 'Hôm nay' : 'Đã kết thúc',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: Colors.grey[600],
                           fontStyle: FontStyle.italic,
