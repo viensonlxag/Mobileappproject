@@ -11,13 +11,12 @@ import '../screens/settings_screen.dart';
 import '../utils/category_helper.dart';
 import 'category_transactions_screen.dart';
 import 'budget_screen.dart';
-import 'category_analysis_screen.dart'; // Import màn hình phân tích
+import 'category_analysis_screen.dart';
+import '../screens/notifications_screen.dart';
+// import '../services/notification_service.dart'; // Không cần import ở đây nữa nếu chỉ điều hướng
 
 // ***** DI CHUYỂN ENUM RA NGOÀI CLASS *****
 enum CategoryDetailType { subCategory, parentCategory }
-
-// _StylizedSLogo, HomeScreen, _HomeScreenState, PlaceholderWidget, _HomeContent,
-// _SectionTitle, _WelcomeBanner, _OverviewSection, _InfoCard giữ nguyên
 
 class _StylizedSLogo extends StatelessWidget {
   final Color backgroundColor;
@@ -77,13 +76,13 @@ class _HomeScreenState extends State<HomeScreen> {
   static final List<Widget> _widgetOptions = <Widget>[
     const _HomeContent(),
     const HistoryScreen(),
-    Container(), // Placeholder for Add Transaction, handled by _onItemTapped
+    Container(),
     const BudgetScreen(),
     const SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
-    if (index == 2) { // Nút Ghi chép (Add)
+    if (index == 2) {
       Navigator.pushNamed(context, Routes.addTransaction);
     } else {
       setState(() {
@@ -97,9 +96,9 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _selectedIndex = 0;
       });
-      return false; // Ngăn không cho thoát app, quay về tab Tổng quan
+      return false;
     }
-    return true; // Cho phép thoát app nếu đang ở tab Tổng quan
+    return true;
   }
 
   @override
@@ -111,11 +110,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        appBar: _selectedIndex == 0 // Chỉ hiển thị AppBar cho tab Tổng quan
+        appBar: _selectedIndex == 0
             ? AppBar(
           backgroundColor: appBarTheme.backgroundColor,
           foregroundColor: appBarForegroundColor,
-          automaticallyImplyLeading: false, // Không hiển thị nút back mặc định
+          automaticallyImplyLeading: false,
           elevation: appBarTheme.elevation,
           title: Row(
             children: [
@@ -127,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                'Budget', // Hoặc tên ứng dụng của bạn
+                'Budget',
                 style: TextStyle(
                   fontFamily: titleFontFamily,
                   color: appBarForegroundColor,
@@ -140,17 +139,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.notifications_none_rounded, color: appBarForegroundColor.withOpacity(0.9)),
+              icon: Icon(Icons.notifications_none_rounded, color: appBarForegroundColor.withOpacity(0.9)), // Có thể đổi lại thành notifications_none nếu không có trạng thái active
+              tooltip: 'Thông báo',
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Tính năng thông báo sắp ra mắt!')),
-                );
+                // ***** THAY ĐỔI ĐIỀU HƯỚNG CHO NÚT THÔNG BÁO *****
+                Navigator.pushNamed(context, Routes.notifications);
               },
             ),
             const SizedBox(width: 8),
           ],
         )
-            : null, // Không hiển thị AppBar cho các tab khác
+            : null,
         body: IndexedStack(
           index: _selectedIndex,
           children: _widgetOptions,
@@ -158,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed, // Để tất cả các label đều hiển thị
+          type: BottomNavigationBarType.fixed,
           items: [
             const BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -560,7 +559,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
   int _touchedIndex = -1;
   ChartType _selectedChartType = ChartType.bar;
   BarChartPeriod _selectedBarChartPeriod = BarChartPeriod.monthly;
-  CategoryDetailType _selectedCategoryDetailType = CategoryDetailType.subCategory;
+  CategoryDetailType _selectedCategoryDetailType = CategoryDetailType
+      .subCategory;
 
   late TabController _categoryTabController;
 
@@ -594,11 +594,17 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     required double percentage,
     bool isTouched = false,
   }) {
-    final textTheme = Theme.of(context).textTheme;
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
     final Color baseTextColor = Colors.grey[800]!;
     final Color touchedColor = color;
-    final Color currentTextColor = isTouched ? touchedColor.withOpacity(0.9) : baseTextColor;
-    final FontWeight currentFontWeight = isTouched ? FontWeight.bold : FontWeight.w500;
+    final Color currentTextColor = isTouched
+        ? touchedColor.withOpacity(0.9)
+        : baseTextColor;
+    final FontWeight currentFontWeight = isTouched
+        ? FontWeight.bold
+        : FontWeight.w500;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3.5),
@@ -610,11 +616,13 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: color,
-              border: isTouched ? Border.all(color: color.withOpacity(0.7), width: 1.5) : null,
+              border: isTouched ? Border.all(
+                  color: color.withOpacity(0.7), width: 1.5) : null,
             ),
           ),
           const SizedBox(width: 8),
-          Icon(categoryIcon, size: 18, color: isTouched ? touchedColor : color.withOpacity(0.85)),
+          Icon(categoryIcon, size: 18,
+              color: isTouched ? touchedColor : color.withOpacity(0.85)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -643,21 +651,28 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
 
   Widget _buildPieChart(BuildContext context, AppProvider appProvider) {
     final dataMap = appProvider.categoryBreakdown;
-    final textTheme = Theme.of(context).textTheme;
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
     const TextStyle defaultTextStyle = TextStyle();
 
     if (dataMap.isEmpty) {
-      return _buildNoDataWidget(context, "Không có chi tiêu tháng này để phân bổ.");
+      return _buildNoDataWidget(
+          context, "Không có chi tiêu tháng này để phân bổ.");
     }
 
-    final double totalValue = dataMap.values.fold(0.0, (sum, item) => sum + item);
-    final sortedEntries = dataMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final List<Color> sectionColors = sortedEntries.map((entry) => CategoryHelper.getCategoryColor(entry.key, 'Chi tiêu')).toList();
+    final double totalValue = dataMap.values.fold(
+        0.0, (sum, item) => sum + item);
+    final sortedEntries = dataMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final List<Color> sectionColors = sortedEntries.map((entry) =>
+        CategoryHelper.getCategoryColor(entry.key, 'Chi tiêu')).toList();
 
     List<PieChartSectionData> pieChartSections = [];
     for (int i = 0; i < sortedEntries.length; i++) {
       final entry = sortedEntries[i];
-      final percentage = totalValue == 0 ? 0.0 : (entry.value / totalValue) * 100;
+      final percentage = totalValue == 0 ? 0.0 : (entry.value / totalValue) *
+          100;
       final bool isTouched = i == _touchedIndex;
       pieChartSections.add(
         PieChartSectionData(
@@ -678,7 +693,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     }
 
     const int maxLegendItems = 5;
-    List<MapEntry<String, double>> legendEntriesToShow = sortedEntries.take(maxLegendItems).toList();
+    List<MapEntry<String, double>> legendEntriesToShow = sortedEntries.take(
+        maxLegendItems).toList();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -692,11 +708,14 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                 pieTouchData: PieTouchData(
                   touchCallback: (FlTouchEvent event, pieTouchResponse) {
                     setState(() {
-                      if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                      if (!event.isInterestedForInteractions ||
+                          pieTouchResponse == null ||
+                          pieTouchResponse.touchedSection == null) {
                         _touchedIndex = -1;
                         return;
                       }
-                      _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                      _touchedIndex =
+                          pieTouchResponse.touchedSection!.touchedSectionIndex;
                     });
                   },
                 ),
@@ -717,11 +736,16 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
-            children: legendEntriesToShow.asMap().entries.map((indexedEntry) {
+            children: legendEntriesToShow
+                .asMap()
+                .entries
+                .map((indexedEntry) {
               final index = indexedEntry.key;
               final entry = indexedEntry.value;
-              final percentage = totalValue == 0 ? 0.0 : (entry.value / totalValue) * 100;
-              final categoryDetails = CategoryHelper.getCategoryDetails(entry.key, 'Chi tiêu');
+              final percentage = totalValue == 0 ? 0.0 : (entry.value /
+                  totalValue) * 100;
+              final categoryDetails = CategoryHelper.getCategoryDetails(
+                  entry.key, 'Chi tiêu');
               if (percentage > 0.1) {
                 return _buildAdvancedLegendItem(
                   context,
@@ -741,8 +765,12 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     );
   }
 
-  Widget _getBottomTitleWidgets(double value, TitleMeta meta, BarChartPeriod period, BuildContext context, List<String> monthKeys, List<int> dailyKeysToDisplay) {
-    final textTheme = Theme.of(context).textTheme;
+  Widget _getBottomTitleWidgets(double value, TitleMeta meta,
+      BarChartPeriod period, BuildContext context, List<String> monthKeys,
+      List<int> dailyKeysToDisplay) {
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
     String text = '';
     final int intValue = value.toInt();
 
@@ -753,10 +781,11 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     } else {
       final monthIndex = value.toInt();
       if (monthIndex >= 0 && monthIndex < monthKeys.length) {
-        if (monthKeys.length <= 3 ) {
+        if (monthKeys.length <= 3) {
           text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
         } else {
-          if (monthIndex == 0 || monthIndex == monthKeys.length - 1 || monthIndex == (monthKeys.length / 2).floor()) {
+          if (monthIndex == 0 || monthIndex == monthKeys.length - 1 ||
+              monthIndex == (monthKeys.length / 2).floor()) {
             text = monthKeys[monthIndex].replaceFirst('Thg ', 'T');
           }
         }
@@ -773,21 +802,29 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     );
   }
 
-  Widget _getLeftTitleWidgets(double value, TitleMeta meta, BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+  Widget _getLeftTitleWidgets(double value, TitleMeta meta,
+      BuildContext context) {
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
     final numberFormatter = NumberFormat("#,##0.#", "vi_VN");
 
     if (value == meta.min && meta.min == 0) {
       return SideTitleWidget(
         axisSide: meta.axisSide,
         space: 4,
-        child: Text("0", style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])),
+        child: Text("0", style: textTheme.labelSmall?.copyWith(
+            fontSize: 9, color: Colors.grey[700])),
       );
     }
 
     final double interval = meta.appliedInterval;
-    if (value > meta.min && value <= meta.max && ( (value % interval).abs() < 0.01 * interval || ((interval - (value % interval).abs()) < 0.01 * interval )) ) {
-      if (value == meta.max && (meta.max - (value - interval)).abs() < interval * 0.5 && meta.max != value) {
+    if (value > meta.min && value <= meta.max &&
+        ((value % interval).abs() < 0.01 * interval ||
+            ((interval - (value % interval).abs()) < 0.01 * interval))) {
+      if (value == meta.max &&
+          (meta.max - (value - interval)).abs() < interval * 0.5 &&
+          meta.max != value) {
         return const SizedBox.shrink();
       }
       return SideTitleWidget(
@@ -795,7 +832,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
         space: 4,
         child: Text(
             numberFormatter.format(value / 1000000),
-            style: textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.grey[700])
+            style: textTheme.labelSmall?.copyWith(
+                fontSize: 9, color: Colors.grey[700])
         ),
       );
     }
@@ -807,17 +845,24 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     Map<int, double> dataForChartIntKeys = {};
     List<int> dailyXValuesToPlot = [];
     double maxY = 0;
-    final textTheme = Theme.of(context).textTheme;
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
 
-    final List<MapEntry<String,double>> recentMonthlyExpenses = appProvider.getRecentMonthlyExpenses(numberOfMonths: 3);
-    final List<String> recentMonthKeys = recentMonthlyExpenses.map((e) => e.key).toList();
+    final List<MapEntry<String, double>> recentMonthlyExpenses = appProvider
+        .getRecentMonthlyExpenses(numberOfMonths: 3);
+    final List<String> recentMonthKeys = recentMonthlyExpenses
+        .map((e) => e.key)
+        .toList();
 
 
     if (_selectedBarChartPeriod == BarChartPeriod.daily) {
-      List<MapEntry<int, double>> sortedDailyExpenses = appProvider.dailyExpensesCurrentMonth.entries.toList()
+      List<MapEntry<int, double>> sortedDailyExpenses = appProvider
+          .dailyExpensesCurrentMonth.entries.toList()
         ..sort((a, b) => a.key.compareTo(b.key));
 
-      List<MapEntry<int, double>> lastSixActiveDays = sortedDailyExpenses.length > 6
+      List<MapEntry<int, double>> lastSixActiveDays = sortedDailyExpenses
+          .length > 6
           ? sortedDailyExpenses.sublist(sortedDailyExpenses.length - 6)
           : sortedDailyExpenses;
 
@@ -828,9 +873,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
         maxY = dataForChartIntKeys.values.reduce((a, b) => a > b ? a : b);
       }
       maxY = (maxY == 0) ? 50000 : (maxY * 1.3).ceilToDouble();
-
     } else { // Monthly
-      for(int i=0; i < recentMonthlyExpenses.length; i++){
+      for (int i = 0; i < recentMonthlyExpenses.length; i++) {
         dataForChartIntKeys[i] = recentMonthlyExpenses[i].value;
       }
       if (dataForChartIntKeys.isNotEmpty) {
@@ -844,7 +888,11 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
 
     if (_selectedBarChartPeriod == BarChartPeriod.daily) {
       barGroups = dailyXValuesToPlot.map((dayKey) {
-        Color barColor = Theme.of(context).colorScheme.primary.withOpacity(0.85);
+        Color barColor = Theme
+            .of(context)
+            .colorScheme
+            .primary
+            .withOpacity(0.85);
         return BarChartGroupData(
           x: dayKey,
           barRods: [
@@ -859,9 +907,15 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
       }).toList();
     } else { // Monthly
       barGroups = List.generate(recentMonthlyExpenses.length, (i) {
-        Color barColor = (Theme.of(context).colorScheme.primaryContainer).withOpacity(0.6);
+        Color barColor = (Theme
+            .of(context)
+            .colorScheme
+            .primaryContainer).withOpacity(0.6);
         if (i == recentMonthlyExpenses.length - 1) {
-          barColor = Theme.of(context).colorScheme.primary;
+          barColor = Theme
+              .of(context)
+              .colorScheme
+              .primary;
         }
         return BarChartGroupData(
           x: i,
@@ -879,7 +933,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
 
 
     return Padding(
-      padding: const EdgeInsets.only(top: 0.0, right: 16.0, bottom: 8.0, left: 4.0),
+      padding: const EdgeInsets.only(
+          top: 0.0, right: 16.0, bottom: 8.0, left: 4.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -889,7 +944,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
               padding: const EdgeInsets.only(left: 8.0, top: 0.0, bottom: 6.0),
               child: Text(
                 "(Triệu)",
-                style: textTheme.labelSmall?.copyWith(color: Colors.grey[600], fontSize: 9),
+                style: textTheme.labelSmall?.copyWith(
+                    color: Colors.grey[600], fontSize: 9),
               ),
             ),
           ),
@@ -899,24 +955,33 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                 maxY: maxY,
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => Colors.grey.shade800.withOpacity(0.9),
-                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    getTooltipColor: (_) =>
+                        Colors.grey.shade800.withOpacity(0.9),
+                    tooltipPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
                     tooltipMargin: 10,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       String title;
                       if (_selectedBarChartPeriod == BarChartPeriod.daily) {
                         title = 'Ngày ${group.x.toInt()}';
                       } else {
-                        title = (group.x.toInt() >=0 && group.x.toInt() < recentMonthKeys.length)
+                        title = (group.x.toInt() >= 0 &&
+                            group.x.toInt() < recentMonthKeys.length)
                             ? recentMonthKeys[group.x.toInt()]
-                            : 'Tháng ${group.x.toInt() +1}';
+                            : 'Tháng ${group.x.toInt() + 1}';
                       }
                       return BarTooltipItem(
                         '$title\n',
-                        TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5, fontFamily: textTheme.bodyMedium?.fontFamily),
+                        TextStyle(color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12.5,
+                            fontFamily: textTheme.bodyMedium?.fontFamily),
                         children: <TextSpan>[
                           TextSpan(
-                            text: NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0).format(rod.toY),
+                            text: NumberFormat
+                                .currency(
+                                locale: 'vi_VN', symbol: 'đ', decimalDigits: 0)
+                                .format(rod.toY),
                             style: TextStyle(
                                 color: Colors.yellow.shade700,
                                 fontSize: 11.5,
@@ -932,12 +997,17 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                 ),
                 titlesData: FlTitlesData(
                   show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      getTitlesWidget: (value, meta) => _getBottomTitleWidgets(value, meta, _selectedBarChartPeriod, context, recentMonthKeys, dailyXValuesToPlot),
+                      getTitlesWidget: (value, meta) =>
+                          _getBottomTitleWidgets(
+                              value, meta, _selectedBarChartPeriod, context,
+                              recentMonthKeys, dailyXValuesToPlot),
                       reservedSize: 28,
                       interval: 1,
                     ),
@@ -946,7 +1016,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 38,
-                      getTitlesWidget: (value, meta) => _getLeftTitleWidgets(value, meta, context),
+                      getTitlesWidget: (value, meta) =>
+                          _getLeftTitleWidgets(value, meta, context),
                       interval: maxY > 0 ? (maxY / 4).ceilToDouble() : 200000,
                     ),
                   ),
@@ -955,8 +1026,12 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.shade300.withOpacity(0.5), strokeWidth: 0.7),
-                  horizontalInterval: maxY > 0 ? (maxY / 4).ceilToDouble() : 100000,
+                  getDrawingHorizontalLine: (value) =>
+                      FlLine(color: Colors.grey.shade300.withOpacity(0.5),
+                          strokeWidth: 0.7),
+                  horizontalInterval: maxY > 0
+                      ? (maxY / 4).ceilToDouble()
+                      : 100000,
                 ),
                 barGroups: barGroups,
                 alignment: BarChartAlignment.spaceAround,
@@ -979,27 +1054,38 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_selectedChartType == ChartType.pie ? 'Phân bổ danh mục' : 'Xu hướng chi tiêu', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Text(_selectedChartType == ChartType.pie
+                  ? 'Phân bổ danh mục'
+                  : 'Xu hướng chi tiêu',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold)),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: ToggleButtons(
-                  isSelected: [_selectedChartType == ChartType.pie, _selectedChartType == ChartType.bar],
+                  isSelected: [
+                    _selectedChartType == ChartType.pie,
+                    _selectedChartType == ChartType.bar
+                  ],
                   onPressed: (int index) {
                     setState(() {
-                      _selectedChartType = index == 0 ? ChartType.pie : ChartType.bar;
+                      _selectedChartType =
+                      index == 0 ? ChartType.pie : ChartType.bar;
                     });
                   },
                   borderRadius: BorderRadius.circular(8),
                   selectedColor: Colors.white,
                   fillColor: theme.colorScheme.primary,
                   color: theme.colorScheme.primary.withOpacity(0.8),
-                  constraints: const BoxConstraints(minHeight: 36, minWidth: 42),
+                  constraints: const BoxConstraints(
+                      minHeight: 36, minWidth: 42),
                   children: const [
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.pie_chart_rounded, size: 20)),
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.insert_chart_rounded, size: 20)),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(Icons.pie_chart_rounded, size: 20)),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(Icons.insert_chart_rounded, size: 20)),
                   ],
                 ),
               )
@@ -1011,21 +1097,30 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 ToggleButtons(
-                  isSelected: [_selectedBarChartPeriod == BarChartPeriod.daily, _selectedBarChartPeriod == BarChartPeriod.monthly],
+                  isSelected: [
+                    _selectedBarChartPeriod == BarChartPeriod.daily,
+                    _selectedBarChartPeriod == BarChartPeriod.monthly
+                  ],
                   onPressed: (int index) {
                     setState(() {
-                      _selectedBarChartPeriod = index == 0 ? BarChartPeriod.daily : BarChartPeriod.monthly;
+                      _selectedBarChartPeriod =
+                      index == 0 ? BarChartPeriod.daily : BarChartPeriod
+                          .monthly;
                     });
                   },
                   borderRadius: BorderRadius.circular(8),
                   selectedColor: theme.colorScheme.onSecondary,
                   fillColor: theme.colorScheme.secondary,
                   color: theme.colorScheme.secondary.withOpacity(0.8),
-                  constraints: const BoxConstraints(minHeight: 32, minWidth: 65),
-                  textStyle: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+                  constraints: const BoxConstraints(
+                      minHeight: 32, minWidth: 65),
+                  textStyle: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600),
                   children: const [
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('NGÀY')),
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('THÁNG')),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('NGÀY')),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('THÁNG')),
                   ],
                 ),
               ],
@@ -1036,13 +1131,18 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     );
   }
 
-  Widget _buildCategoryDetailsList(BuildContext context, AppProvider appProvider) {
-    final dataMap = _selectedCategoryDetailType == CategoryDetailType.subCategory
+  Widget _buildCategoryDetailsList(BuildContext context,
+      AppProvider appProvider) {
+    final dataMap = _selectedCategoryDetailType ==
+        CategoryDetailType.subCategory
         ? appProvider.categoryBreakdown
         : appProvider.parentCategoryBreakdown;
 
-    final textTheme = Theme.of(context).textTheme;
-    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0); // Sửa lại formatter
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
+    final currencyFormatter = NumberFormat.currency(
+        locale: 'vi_VN', symbol: 'đ', decimalDigits: 0); // Sửa lại formatter
 
     if (dataMap.isEmpty) {
       return Padding(
@@ -1064,7 +1164,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: DefaultTabController(
             length: 2,
-            initialIndex: _selectedCategoryDetailType == CategoryDetailType.subCategory ? 0 : 1,
+            initialIndex: _selectedCategoryDetailType ==
+                CategoryDetailType.subCategory ? 0 : 1,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1078,12 +1179,17 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                     controller: _categoryTabController,
                     indicator: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: Theme.of(context).colorScheme.primary,
+                      color: Theme
+                          .of(context)
+                          .colorScheme
+                          .primary,
                     ),
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.black54,
-                    labelStyle: textTheme.labelLarge?.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
-                    unselectedLabelStyle: textTheme.labelMedium?.copyWith(fontSize: 13, fontWeight: FontWeight.w500),
+                    labelStyle: textTheme.labelLarge?.copyWith(
+                        fontSize: 13, fontWeight: FontWeight.bold),
+                    unselectedLabelStyle: textTheme.labelMedium?.copyWith(
+                        fontSize: 13, fontWeight: FontWeight.w500),
                     indicatorSize: TabBarIndicatorSize.tab,
                     tabs: const [
                       Tab(text: 'Danh mục con'),
@@ -1104,7 +1210,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
             Map<String, dynamic> categoryDetails;
 
             if (_selectedCategoryDetailType == CategoryDetailType.subCategory) {
-              categoryDetails = CategoryHelper.getCategoryDetails(entry.key, 'Chi tiêu');
+              categoryDetails =
+                  CategoryHelper.getCategoryDetails(entry.key, 'Chi tiêu');
             } else {
               categoryDetails = AppProvider.getParentCategoryVisuals(entry.key);
             }
@@ -1120,10 +1227,11 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => CategoryTransactionsScreen(
-                      categoryName: entry.key,
-                      categoryType: _selectedCategoryDetailType,
-                    ),
+                    builder: (context) =>
+                        CategoryTransactionsScreen(
+                          categoryName: entry.key,
+                          categoryType: _selectedCategoryDetailType,
+                        ),
                   ),
                 );
               },
@@ -1142,7 +1250,9 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
     required NumberFormat formatter,
     VoidCallback? onTap,
   }) {
-    final textTheme = Theme.of(context).textTheme;
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1161,17 +1271,20 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
               Expanded(
                 child: Text(
                   categoryName,
-                  style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
+                  style: textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w500),
                 ),
               ),
               const SizedBox(width: 16),
               Text(
                 formatter.format(amount),
-                style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: Colors.grey[800]),
+                style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600, color: Colors.grey[800]),
               ),
               if (onTap != null) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey[400]),
+                Icon(Icons.arrow_forward_ios_rounded, size: 14,
+                    color: Colors.grey[400]),
               ]
             ],
           ),
@@ -1188,26 +1301,31 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
 
     if (_selectedChartType == ChartType.pie) {
       if (appProvider.categoryBreakdown.isEmpty) {
-        chartView = _buildNoDataWidget(context, "Không có chi tiêu tháng này để phân bổ.");
+        chartView = _buildNoDataWidget(
+            context, "Không có chi tiêu tháng này để phân bổ.");
       } else {
         chartView = _buildPieChart(context, appProvider);
       }
     } else { // Bar Chart
       bool noBarData = false;
       if (_selectedBarChartPeriod == BarChartPeriod.daily) {
-        List<MapEntry<int, double>> sortedDailyExpenses = appProvider.dailyExpensesCurrentMonth.entries.toList()
+        List<MapEntry<int, double>> sortedDailyExpenses = appProvider
+            .dailyExpensesCurrentMonth.entries.toList()
           ..sort((a, b) => a.key.compareTo(b.key));
-        List<MapEntry<int, double>> lastSixActiveDays = sortedDailyExpenses.length > 6
+        List<MapEntry<int, double>> lastSixActiveDays = sortedDailyExpenses
+            .length > 6
             ? sortedDailyExpenses.sublist(sortedDailyExpenses.length - 6)
             : sortedDailyExpenses;
         noBarData = lastSixActiveDays.isEmpty;
-
       } else { // Monthly
-        noBarData = appProvider.getRecentMonthlyExpenses(numberOfMonths: 3).every((entry) => entry.value == 0.0);
+        noBarData =
+            appProvider.getRecentMonthlyExpenses(numberOfMonths: 3).every((
+                entry) => entry.value == 0.0);
       }
 
       if (noBarData) {
-        chartView = _buildNoDataWidget(context, "Không có dữ liệu chi tiêu cho khoảng thời gian này.");
+        chartView = _buildNoDataWidget(
+            context, "Không có dữ liệu chi tiêu cho khoảng thời gian này.");
       } else {
         chartView = _buildBarChart(context, appProvider);
       }
@@ -1222,7 +1340,10 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
           margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           padding: const EdgeInsets.fromLTRB(8.0, 12.0, 8.0, 12.0),
           decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color ?? Colors.white,
+            color: Theme
+                .of(context)
+                .cardTheme
+                .color ?? Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
@@ -1238,7 +1359,8 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
               return FadeTransition(opacity: animation, child: child);
             },
             child: SizedBox(
-              key: ValueKey(_selectedChartType.toString() + _selectedBarChartPeriod.toString()),
+              key: ValueKey(_selectedChartType.toString() +
+                  _selectedBarChartPeriod.toString()),
               height: 230,
               child: chartView,
             ),
@@ -1251,7 +1373,9 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
   }
 
   Widget _buildNoDataWidget(BuildContext context, String message) {
-    final textTheme = Theme.of(context).textTheme;
+    final textTheme = Theme
+        .of(context)
+        .textTheme;
     const TextStyle defaultTextStyle = TextStyle();
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1259,17 +1383,22 @@ class _CategoryPieChartSectionState extends State<_CategoryPieChartSection> with
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.highlight_off_rounded, size: 48, color: Colors.grey[400]),
+            Icon(
+                Icons.highlight_off_rounded, size: 48, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               message,
-              style: (textTheme.titleSmall ?? defaultTextStyle.copyWith(fontSize: 15)).copyWith(color: Colors.grey[700], fontWeight: FontWeight.w600),
+              style: (textTheme.titleSmall ??
+                  defaultTextStyle.copyWith(fontSize: 15)).copyWith(
+                  color: Colors.grey[700], fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
               'Hãy thêm giao dịch để xem phân tích.',
-              style: (textTheme.bodyMedium ?? defaultTextStyle.copyWith(fontSize: 13)).copyWith(color: Colors.grey[600]),
+              style: (textTheme.bodyMedium ??
+                  defaultTextStyle.copyWith(fontSize: 13)).copyWith(
+                  color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
           ],

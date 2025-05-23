@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+// import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln; // Không cần import fln.Day ở đây nữa
+
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 import '../models/expense_transaction.dart';
-import '../models/budget.dart'; // ***** THÊM IMPORT CHO BUDGET MODEL *****
+import '../models/budget.dart';
 import '../routes.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -13,10 +16,14 @@ class AppProvider extends ChangeNotifier {
   FirestoreService? _firestoreService;
   User? _currentUser;
   List<ExpenseTransaction> _transactions = [];
-  List<Budget> _budgets = []; // ***** DANH SÁCH LƯU TRỮ NGÂN SÁCH *****
+  List<Budget> _budgets = [];
 
   bool _isLoading = false;
   String? _errorMessage;
+
+  final Map<String, DateTime> _notifiedBudgetAlerts = {};
+  static const Duration _minIntervalBetweenAlerts = Duration(hours: 24);
+
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -52,7 +59,7 @@ class AppProvider extends ChangeNotifier {
   String get userName => _userName;
   DateTime? get userDateOfBirth => _userDateOfBirth;
   List<ExpenseTransaction> get transactions => List.unmodifiable(_transactions);
-  List<Budget> get budgets => List.unmodifiable(_budgets); // ***** GETTER CHO NGÂN SÁCH *****
+  List<Budget> get budgets => List.unmodifiable(_budgets);
 
   static final Map<String, Map<String, dynamic>> _parentCategoryDefinitions = {
     'Chi tiêu sinh hoạt': {
@@ -108,11 +115,11 @@ class AppProvider extends ChangeNotifier {
         _firestoreService = FirestoreService(_currentUser!.uid);
         await _loadUserProfile();
         _listenTransactions();
-        _listenBudgets(); // ***** GỌI LẮNG NGHE NGÂN SÁCH *****
+        _listenBudgets();
       } else {
         _firestoreService = null;
         _transactions = [];
-        _budgets = []; // ***** RESET NGÂN SÁCH KHI ĐĂNG XUẤT *****
+        _budgets = [];
         _resetUserProfile();
       }
       _setLoading(false);
@@ -127,6 +134,7 @@ class AppProvider extends ChangeNotifier {
     }
     _firestoreService!.streamTransactions().listen((txList) {
       _transactions = txList;
+      checkAndNotifyForBudgets();
       notifyListeners();
     }, onError: (error) {
       _setError("Không thể tải danh sách giao dịch: ${error.toString()}");
@@ -135,16 +143,15 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
-  // ***** PHƯƠNG THỨC LẮNG NGHE THAY ĐỔI NGÂN SÁCH TỪ FIRESTORE *****
   void _listenBudgets() {
     if (_firestoreService == null) {
       _budgets = [];
       notifyListeners();
       return;
     }
-    // Giả sử FirestoreService có phương thức streamBudgets() tương tự streamTransactions()
     _firestoreService!.streamBudgets().listen((budgetList) {
       _budgets = budgetList;
+      checkAndNotifyForBudgets();
       notifyListeners();
     }, onError: (error) {
       _setError("Không thể tải danh sách ngân sách: ${error.toString()}");
@@ -231,18 +238,18 @@ class AppProvider extends ChangeNotifier {
 
   double get totalExpense {
     return currentMonthTransactions
-        .where((tx) => (tx.amount ?? 0.0) < 0)
+        .where((tx) => (tx.amount) < 0)
         .fold<double>(0.0, (double sum, ExpenseTransaction tx) {
-      final double currentAmount = tx.amount?.abs() ?? 0.0;
+      final double currentAmount = tx.amount.abs();
       return sum + currentAmount;
     });
   }
 
   double get totalIncome {
     return currentMonthTransactions
-        .where((tx) => (tx.amount ?? 0.0) > 0)
+        .where((tx) => (tx.amount) > 0)
         .fold<double>(0.0, (double sum, ExpenseTransaction tx) {
-      final double currentAmount = tx.amount ?? 0.0;
+      final double currentAmount = tx.amount;
       return sum + currentAmount;
     });
   }
@@ -250,9 +257,9 @@ class AppProvider extends ChangeNotifier {
   Map<String, double> get categoryBreakdown {
     final Map<String, double> data = {};
     for (var tx in currentMonthTransactions) {
-      if ((tx.amount ?? 0.0) < 0) {
+      if ((tx.amount) < 0) {
         final double currentCategoryAmount = data[tx.category] ?? 0.0;
-        final double transactionAmount = tx.amount?.abs() ?? 0.0;
+        final double transactionAmount = tx.amount.abs();
         data[tx.category] = currentCategoryAmount + transactionAmount;
       }
     }
@@ -269,7 +276,7 @@ class AppProvider extends ChangeNotifier {
     }
 
     for (var tx in currentMonthTransactions) {
-      if ((tx.amount ?? 0.0) < 0) {
+      if ((tx.amount) < 0) {
         String parentCategoryName = _defaultParentCategory;
         bool foundParent = false;
         for (var parentEntry in _parentCategoryDefinitions.entries) {
@@ -286,8 +293,8 @@ class AppProvider extends ChangeNotifier {
 
         parentData.update(
             parentCategoryName,
-                (value) => value + (tx.amount?.abs() ?? 0.0),
-            ifAbsent: () => (tx.amount?.abs() ?? 0.0)
+                (value) => value + (tx.amount.abs()),
+            ifAbsent: () => (tx.amount.abs())
         );
       }
     }
@@ -298,9 +305,9 @@ class AppProvider extends ChangeNotifier {
   String get expenseCompareText {
     final currentMonthExp = totalExpense;
     final prevMonthExp = previousMonthTransactions
-        .where((tx) => (tx.amount ?? 0.0) < 0)
+        .where((tx) => (tx.amount) < 0)
         .fold<double>(0.0, (double sum, ExpenseTransaction tx) {
-      final double currentAmount = tx.amount?.abs() ?? 0.0;
+      final double currentAmount = tx.amount.abs();
       return sum + currentAmount;
     });
 
@@ -334,13 +341,13 @@ class AppProvider extends ChangeNotifier {
     final currentMonthTxs = _transactions.where((tx) =>
     tx.date.year == now.year &&
         tx.date.month == now.month &&
-        (tx.amount ?? 0.0) < 0);
+        (tx.amount) < 0);
 
     for (var tx in currentMonthTxs) {
       dailyData.update(
         tx.date.day,
-            (value) => value + (tx.amount?.abs() ?? 0.0),
-        ifAbsent: () => (tx.amount?.abs() ?? 0.0),
+            (value) => value + (tx.amount.abs()),
+        ifAbsent: () => (tx.amount.abs()),
       );
     }
     return dailyData;
@@ -358,8 +365,8 @@ class AppProvider extends ChangeNotifier {
           .where((tx) =>
       tx.date.year == targetMonthDateTime.year &&
           tx.date.month == targetMonthDateTime.month &&
-          (tx.amount ?? 0.0) < 0)
-          .fold(0.0, (sum, tx) => sum + (tx.amount?.abs() ?? 0.0));
+          (tx.amount) < 0)
+          .fold(0.0, (sum, tx) => sum + (tx.amount.abs()));
 
       monthlyDataList.add(MapEntry(monthFormat.format(targetMonthDateTime), totalForMonth));
     }
@@ -371,7 +378,7 @@ class AppProvider extends ChangeNotifier {
     final now = DateTime.now();
     final currentYearTxs = _transactions.where((tx) =>
     tx.date.year == now.year &&
-        (tx.amount ?? 0.0) < 0);
+        (tx.amount) < 0);
 
     final monthFormat = DateFormat('MMM', 'vi_VN');
 
@@ -383,14 +390,14 @@ class AppProvider extends ChangeNotifier {
       String monthKey = monthFormat.format(tx.date);
       monthlyData.update(
         monthKey,
-            (value) => value + (tx.amount?.abs() ?? 0.0),
-        ifAbsent: () => (tx.amount?.abs() ?? 0.0),
+            (value) => value + (tx.amount.abs()),
+        ifAbsent: () => (tx.amount.abs()),
       );
     }
     return monthlyData;
   }
 
-  // --- AUTH METHODS ---
+
   Future<void> signIn(String email, String pass) async {
     _setLoading(true);
     clearError();
@@ -455,7 +462,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // --- Transaction Methods ---
   Future<void> addTransaction(ExpenseTransaction tx) async {
     if (_firestoreService == null) {
       _setError('User chưa đăng nhập để thêm giao dịch');
@@ -507,7 +513,6 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // ***** BUDGET MANAGEMENT METHODS *****
   Future<void> addBudget(Budget budget) async {
     if (_firestoreService == null) {
       _setError('User chưa đăng nhập để thêm ngân sách');
@@ -559,8 +564,143 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> checkAndNotifyForBudgets() async {
+    if (_budgets.isEmpty || _transactions.isEmpty) return;
+    final now = DateTime.now();
 
-  // --- Shared Preferences for "Remember Credentials" ---
+    for (var budget in _budgets) {
+      if (now.isBefore(budget.startDate) || now.isAfter(budget.endDate.copyWith(hour: 23, minute: 59, second: 59))) {
+        continue;
+      }
+
+      DateTime periodStartForSpent;
+      DateTime periodEndForSpent;
+
+      if (budget.isRecurring) {
+        final firstDayOfCurrentMonth = DateTime(now.year, now.month, 1);
+        final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
+
+        if (!(budget.endDate.isBefore(firstDayOfCurrentMonth) || budget.startDate.isAfter(lastDayOfCurrentMonth))) {
+          try { periodStartForSpent = DateTime(now.year, now.month, budget.startDate.day); }
+          catch (e) { periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day); }
+
+          if (budget.endDate.day >= budget.startDate.day || (budget.startDate.month == budget.endDate.month && budget.startDate.year == budget.endDate.year)) {
+            try { periodEndForSpent = DateTime(now.year, now.month, budget.endDate.day, 23, 59, 59, 999); }
+            catch (e) { periodEndForSpent = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999); }
+          } else {
+            if (now.day < budget.startDate.day) {
+              try { periodStartForSpent = DateTime(now.year, now.month -1, budget.startDate.day); }
+              catch (e) { periodStartForSpent = DateTime(now.year, now.month -1, DateTime(now.year, now.month, 0).day); }
+              try { periodEndForSpent = DateTime(now.year, now.month, budget.endDate.day, 23, 59, 59, 999); }
+              catch (e) { periodEndForSpent = DateTime(now.year, now.month + 1, 0,23,59,59,999); }
+            } else {
+              try { periodStartForSpent = DateTime(now.year, now.month, budget.startDate.day); }
+              catch (e) { periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day); }
+              try { periodEndForSpent = DateTime(now.year, now.month + 1, budget.endDate.day, 23, 59, 59, 999); }
+              catch (e) { periodEndForSpent = DateTime(now.year, now.month + 2, 0,23,59,59,999); }
+            }
+          }
+          if(periodStartForSpent.isBefore(budget.startDate)) periodStartForSpent = budget.startDate;
+          if(periodEndForSpent.isAfter(budget.endDate)) periodEndForSpent = budget.endDate.copyWith(hour:23, minute:59, second:59, millisecond: 999);
+        } else {
+          continue;
+        }
+      } else {
+        periodStartForSpent = budget.startDate;
+        periodEndForSpent = budget.endDate.copyWith(hour: 23, minute: 59, second: 59, millisecond: 999);
+      }
+
+      double currentSpent = 0;
+      if (!periodStartForSpent.isAfter(periodEndForSpent)) {
+        final relevantTransactions = _transactions.where((tx) {
+          return tx.category == budget.categoryName &&
+              tx.amount < 0 &&
+              !tx.date.isBefore(periodStartForSpent) &&
+              !tx.date.isAfter(periodEndForSpent);
+        });
+        currentSpent = relevantTransactions.fold(0.0, (sum, tx) => sum + tx.amount.abs());
+      }
+
+      double spendingPercentage = budget.amount > 0 ? (currentSpent / budget.amount) : 0;
+      String notificationKeyNear = 'budget_near_${budget.id}_${now.year}_${now.month}';
+      String notificationKeyOver = 'budget_over_${budget.id}_${now.year}_${now.month}';
+
+      if (spendingPercentage >= 1.0) {
+        if (_canNotify(notificationKeyOver)) {
+          await NotificationService.showBudgetAlert(
+            id: budget.id.hashCode,
+            title: 'Cảnh báo: Vượt Ngân Sách!',
+            body: 'Bạn đã vượt ngân sách cho "${budget.name}". Đã chi: ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)}',
+            payload: 'budget_alert:over:${budget.id}',
+          );
+          _markAsNotified(notificationKeyOver);
+          _markAsNotified(notificationKeyNear);
+        }
+      } else if (spendingPercentage >= 0.8) {
+        if (_canNotify(notificationKeyNear)) {
+          await NotificationService.showBudgetAlert(
+            id: budget.id.hashCode + 1,
+            title: 'Cảnh báo: Ngân Sách Sắp Hết!',
+            body: 'Chi tiêu cho "${budget.name}" đã đạt ${(spendingPercentage * 100).toStringAsFixed(0)}% ngân sách. (${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(currentSpent)} / ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits:0).format(budget.amount)})',
+            payload: 'budget_alert:near:${budget.id}',
+          );
+          _markAsNotified(notificationKeyNear);
+        }
+      }
+    }
+  }
+
+  bool _canNotify(String notificationKey) {
+    final lastNotifiedTime = _notifiedBudgetAlerts[notificationKey];
+    if (lastNotifiedTime == null || DateTime.now().difference(lastNotifiedTime) > _minIntervalBetweenAlerts) {
+      return true;
+    }
+    return false;
+  }
+
+  void _markAsNotified(String notificationKey) {
+    _notifiedBudgetAlerts[notificationKey] = DateTime.now();
+  }
+
+  Future<void> scheduleDailyAppReminder(int hour, int minute) async {
+    await NotificationService.scheduleDailyReminder(
+        id: 1,
+        title: 'Nhắc nhở hàng ngày',
+        body: 'Đừng quên ghi lại các chi tiêu của bạn hôm nay nhé!',
+        hour: hour,
+        minute: minute,
+        payload: 'daily_reminder_payload'
+    );
+  }
+
+  Future<void> scheduleWeeklyAppReminder(List<int> daysOfWeek, int hour, int minute) async {
+    await NotificationService.scheduleWeeklyReminder(
+        id: 2,
+        title: 'Nhắc nhở hàng tuần',
+        body: 'Xem lại tổng kết chi tiêu tuần này và lên kế hoạch cho tuần tới!',
+        daysOfWeek: daysOfWeek,
+        hour: hour,
+        minute: minute,
+        payload: 'weekly_reminder_payload'
+    );
+  }
+
+  Future<void> scheduleMonthlyAppReminder(int dayOfMonth, int hour, int minute) async {
+    await NotificationService.scheduleMonthlyReminder(
+        id: 3,
+        title: 'Nhắc nhở hàng tháng',
+        body: 'Đã đến lúc xem lại ngân sách và chi tiêu tháng này rồi!',
+        dayOfMonth: dayOfMonth,
+        hour: hour,
+        minute: minute,
+        payload: 'monthly_reminder_payload'
+    );
+  }
+
+  Future<void> cancelAllAppNotifications() async {
+    await NotificationService.cancelAllNotifications();
+  }
+
   Future<String?> getSavedEmail() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_savedEmailKey);

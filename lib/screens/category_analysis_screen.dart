@@ -68,7 +68,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
   double _maxYTrend = 1;
 
   final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
-  final compactCurrencyFormatter = NumberFormat.compactCurrency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
+  final compactCurrencyFormatter = NumberFormat.compactCurrency(locale: 'vi_VN', symbol: '', decimalDigits: 1);
   final monthYearFormatter = DateFormat('MM/yy');
 
 
@@ -81,9 +81,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Call _updateAllAnalysis when dependencies change (e.g., AppProvider)
-    // and also for the first time after initState (as Consumer will trigger a build)
-    final appProvider = Provider.of<AppProvider>(context, listen: false); // listen: false because Consumer will handle rebuilds
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
     _updateAllAnalysis(appProvider);
   }
 
@@ -116,7 +114,6 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     if(mounted){
-      // Only call setState if data has actually changed to avoid unnecessary rebuilds
       if (!mapsAreEqual(_categorySpendingData, spendingData) ||
           _totalSpendingForPeriod != totalSpending ||
           !listEquals(_topSpendingCategories, sortedCategoriesFull.take(5).toList())) {
@@ -130,7 +127,6 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
     }
   }
 
-  // Utility function to compare two maps (for checking data changes)
   bool mapsAreEqual<K, V>(Map<K, V> map1, Map<K, V> map2) {
     if (map1.length != map2.length) return false;
     for (final key in map1.keys) {
@@ -147,7 +143,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
 
     List<DateTime> monthsInRange = [];
     DateTime loopDate = DateTime(selectedDateRange.start.year, selectedDateRange.start.month, 1);
-    // Ensure the loop includes the end month if the range spans multiple months
+
     while (loopDate.year < selectedDateRange.end.year ||
         (loopDate.year == selectedDateRange.end.year && loopDate.month <= selectedDateRange.end.month)) {
       monthsInRange.add(loopDate);
@@ -156,7 +152,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
       } else {
         loopDate = DateTime(loopDate.year, loopDate.month + 1, 1);
       }
-      if (monthsInRange.length > 36) break; // Limit to 3 years of trend data
+      if (monthsInRange.length > 36) break;
     }
 
     if (monthsInRange.isEmpty && selectedDateRange.start.month == selectedDateRange.end.month && selectedDateRange.start.year == selectedDateRange.end.year) {
@@ -164,9 +160,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
     }
 
     final newTrendMonthLabels = monthsInRange.map((month) => monthYearFormatter.format(month)).toList();
-    // Use _topSpendingCategories which is already sorted and contains top 5
     List<String> topCategoriesForTrend = _topSpendingCategories.take(3).map((e) => e.key).toList();
-
     List<LineChartBarData> lineBars = [];
     double currentMaxY = 0;
 
@@ -176,22 +170,20 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
 
       for (int monthIndex = 0; monthIndex < monthsInRange.length; monthIndex++) {
         DateTime monthStart = monthsInRange[monthIndex];
-        // Ensure monthEnd is the last day of monthStart
         DateTime monthEnd = (monthStart.month == 12)
             ? DateTime(monthStart.year, 12, 31, 23, 59, 59, 999)
             : DateTime(monthStart.year, monthStart.month + 1, 0, 23, 59, 59, 999);
-
 
         double spendingInMonthForCategory = 0;
         for (var tx in transactions) {
           if (tx.category == category &&
               tx.type == 'Chi tiêu' &&
               !tx.date.isBefore(monthStart) &&
-              !tx.date.isAfter(monthEnd)) { // Use isAfter to include the end day
+              !tx.date.isAfter(monthEnd)) {
             spendingInMonthForCategory += tx.amount.abs();
           }
         }
-        final spotY = spendingInMonthForCategory / 1000000; // Convert to millions
+        final spotY = spendingInMonthForCategory / 1000000;
         spots.add(FlSpot(monthIndex.toDouble(), spotY));
         if (spotY > currentMaxY) {
           currentMaxY = spotY;
@@ -214,8 +206,8 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
     }
     if(mounted){
       if (!listEquals(_trendMonthLabels, newTrendMonthLabels) ||
-          !listLineChartBarDataEquals(_trendLineBarsData, lineBars) || // Custom equality check for LineChartBarData
-          _maxYTrend != (currentMaxY == 0 ? 1 : currentMaxY * 1.25)) {
+          !listLineChartBarDataEquals(_trendLineBarsData, lineBars) ||
+          (_maxYTrend - (currentMaxY == 0 ? 1 : currentMaxY * 1.25)).abs() > 0.001 ) {
         setState(() {
           _trendMonthLabels = newTrendMonthLabels;
           _trendLineBarsData = lineBars;
@@ -238,7 +230,14 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
     if (a == null) return b == null;
     if (b == null || a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
+      if (a[i] is FlSpot && b[i] is FlSpot) {
+        if ((a[i] as FlSpot).x != (b[i] as FlSpot).x || (a[i] as FlSpot).y != (b[i] as FlSpot).y) return false;
+      } else if (a[i] is MapEntry && b[i] is MapEntry) { // For _topSpendingCategories
+        if ((a[i] as MapEntry).key != (b[i] as MapEntry).key || (a[i] as MapEntry).value != (b[i] as MapEntry).value) return false;
+      }
+      else if (a[i] != b[i]) {
+        return false;
+      }
     }
     return true;
   }
@@ -291,7 +290,6 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
                           setState(() {
                             _selectedPeriod = period;
                           });
-                          // _updateAllAnalysis will be called by Consumer's rebuild
                         }
                       },
                       labelStyle: TextStyle(
@@ -305,6 +303,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
                       elevation: _selectedPeriod == period ? 2 : 0,
                       pressElevation: 4,
                       shape: StadiumBorder(side: BorderSide(color: _selectedPeriod == period ? theme.colorScheme.primary : theme.colorScheme.outlineVariant, width: 1.2)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     );
                   }).toList(),
                 ),
@@ -478,7 +477,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
 
               return Padding(
                 padding: const EdgeInsets.only(left: 4.0),
-                child: Text(NumberFormat.compact(locale: 'vi_VN').format(value * 1000000),
+                child: Text(compactCurrencyFormatter.format(value * 1000000),
                     style: theme.textTheme.bodySmall?.copyWith(fontSize: 9.5), textAlign: TextAlign.left),
               );
             },
@@ -499,7 +498,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
             return touchedBarSpots.map((barSpot) {
               final flSpot = barSpot;
               String categoryName = "Danh mục";
-              if (barSpot.barIndex < _topSpendingCategories.length) { // Sử dụng _topSpendingCategories đã được tính toán
+              if (barSpot.barIndex < _topSpendingCategories.length) {
                 categoryName = _topSpendingCategories[barSpot.barIndex].key;
               }
 
@@ -606,7 +605,7 @@ class _CategoryAnalysisScreenState extends State<CategoryAnalysisScreen> {
                             value: percentage / 100,
                             backgroundColor: Colors.grey[300],
                             valueColor: AlwaysStoppedAnimation<Color>(categoryDetails['color'] as Color),
-                            minHeight: 6, // Tăng độ dày thanh progress
+                            minHeight: 6,
                             borderRadius: BorderRadius.circular(3),
                           ),
                         )

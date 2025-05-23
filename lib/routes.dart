@@ -7,7 +7,9 @@ import '../screens/settings_screen.dart';
 import '../screens/user_profile_screen.dart';
 import '../screens/category_transactions_screen.dart';
 import '../models/expense_transaction.dart';
-import '../screens/category_analysis_screen.dart'; // ***** THÊM IMPORT NÀY *****
+import '../screens/category_analysis_screen.dart';
+import '../screens/notifications_screen.dart'; // ***** THÊM IMPORT NÀY *****
+
 
 class Routes {
   static const String login = '/login';
@@ -17,7 +19,9 @@ class Routes {
   static const String settings = '/settings';
   static const String userProfile = '/user-profile';
   static const String categoryTransactions = '/category-transactions';
-  static const String categoryAnalysis = '/category-analysis'; // ***** THÊM ROUTE MỚI *****
+  static const String categoryAnalysis = '/category-analysis';
+  static const String notifications = '/notifications'; // ***** THÊM ROUTE MỚI *****
+
 
   static Route<dynamic> generateRoute(RouteSettings routeSettings) {
     switch (routeSettings.name) {
@@ -47,6 +51,7 @@ class Routes {
           return MaterialPageRoute(
             builder: (_) => CategoryTransactionsScreen(
               categoryName: args['categoryName'] as String,
+              // Đảm bảo CategoryDetailType được import đúng cách từ home_screen.dart hoặc nơi nó được định nghĩa
               categoryType: args['categoryType'] as CategoryDetailType,
             ),
           );
@@ -57,9 +62,14 @@ class Routes {
             body: const Center(child: Text('Thiếu thông tin danh mục để hiển thị chi tiết.')),
           ),
         );
-    // ***** THÊM CASE CHO ROUTE MỚI *****
       case Routes.categoryAnalysis:
         return MaterialPageRoute(builder: (_) => const CategoryAnalysisScreen());
+
+    // ***** THÊM CASE CHO ROUTE MỚI *****
+      case Routes.notifications:
+        final String? payload = routeSettings.arguments as String?;
+        return MaterialPageRoute(builder: (_) => NotificationsScreen(payload: payload));
+
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

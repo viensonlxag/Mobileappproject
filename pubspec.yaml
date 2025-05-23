@@ -23,7 +23,7 @@ dependencies:
 
   # Local notifications (Kiểm tra lại sự cần thiết và phiên bản)
   # Nếu không dùng Linux, có thể bỏ flutter_local_notifications_linux
-  flutter_local_notifications: ^19.2.0 # Phiên bản mới nhất (kiểm tra pub.dev)
+  flutter_local_notifications: ^19.2.1 # Phiên bản mới nhất (kiểm tra pub.dev)
   # flutter_local_notifications_linux: ^4.0.0 # Phiên bản mới nhất (kiểm tra pub.dev)
 
   # Timezone support for scheduling
