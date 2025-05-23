@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart'; // For Donut Chart
-import 'package:provider/provider.dart'; // ***** THÊM IMPORT PROVIDER *****
-import '../providers/app_provider.dart'; // ***** THÊM IMPORT APPPROVIDER *****
-import '../models/budget.dart' as budget_model; // ***** SỬ DỤNG ALIAS CHO BUDGET MODEL *****
+import 'package:provider/provider.dart';
+import '../providers/app_provider.dart';
+import '../models/budget.dart' as budget_model;
 import '../utils/category_helper.dart';
 import 'add_edit_budget_screen.dart';
 
@@ -31,7 +31,7 @@ class BudgetDisplayItem {
   final IconData icon;
   final Color color;
   final double amount;
-  double spent; // spent có thể thay đổi dựa trên giao dịch
+  double spent;
   final DateTime startDate;
   final DateTime endDate;
   final bool isRecurring;
@@ -52,105 +52,117 @@ class BudgetDisplayItem {
   double get progress => amount > 0 ? (spent / amount).clamp(0.0, 1.0) : 0.0;
   bool get isOverBudget => spent > amount;
   double get remainingAmount => amount - spent;
+
   int get daysLeft {
     final now = DateTime.now();
+    DateTime cycleEndDateToConsider;
+
     if (isRecurring) {
-      // Tính toán phức tạp hơn cho ngày còn lại của ngân sách lặp lại có thể cần thiết ở đây
-      // Ví dụ đơn giản: nếu endDate.day < now.day (và cùng tháng năm), thì tính cho tháng sau
-      DateTime currentCycleEndDate;
-      if (now.month == endDate.month && now.year == endDate.year) {
-        currentCycleEndDate = endDate;
-      } else {
-        // Tìm ngày cuối của chu kỳ hiện tại hoặc chu kỳ tiếp theo gần nhất
-        // Đây là một ví dụ đơn giản, có thể cần logic phức tạp hơn
-        int monthOffset = 0;
-        while (DateTime(now.year, now.month + monthOffset, endDate.day).isBefore(now) || DateTime(now.year, now.month + monthOffset, endDate.day).month < startDate.month && DateTime(now.year, now.month + monthOffset, endDate.day).year == startDate.year) {
-          monthOffset++;
-          // Giới hạn để tránh vòng lặp vô hạn nếu có lỗi logic
-          if (monthOffset > 12) break;
-        }
-        // Cố gắng tạo ngày hợp lệ
-        try {
-          currentCycleEndDate = DateTime(now.year, now.month + monthOffset, endDate.day);
-          if (currentCycleEndDate.month != (now.month + monthOffset) % 12 && (now.month + monthOffset) % 12 != 0) { // Xử lý ngày không hợp lệ (vd: 31/2)
-            currentCycleEndDate = DateTime(now.year, now.month + monthOffset + 1, 0); // Lấy ngày cuối của tháng trước
-          }
+      int targetYear = now.year;
+      int targetMonth = now.month;
+      int targetEndDay = this.endDate.day;
 
-        } catch (e) {
-          currentCycleEndDate = DateTime(now.year, now.month + monthOffset + 1, 0);
-        }
-
-
+      DateTime currentAttemptCycleEnd = DateTime(targetYear, targetMonth, targetEndDay);
+      if (currentAttemptCycleEnd.month != targetMonth) {
+        currentAttemptCycleEnd = DateTime(targetYear, targetMonth + 1, 0);
       }
-      if (now.isAfter(currentCycleEndDate)) return 0;
-      return currentCycleEndDate.difference(now).inDays +1;
+
+      if (now.isAfter(currentAttemptCycleEnd)) {
+        targetMonth += 1;
+        if (targetMonth > 12) {
+          targetMonth = 1;
+          targetYear += 1;
+        }
+        cycleEndDateToConsider = DateTime(targetYear, targetMonth, targetEndDay);
+        if (cycleEndDateToConsider.month != targetMonth) {
+          cycleEndDateToConsider = DateTime(targetYear, targetMonth + 1, 0);
+        }
+      } else {
+        cycleEndDateToConsider = currentAttemptCycleEnd;
+      }
+      if (cycleEndDateToConsider.isAfter(this.endDate)) {
+        cycleEndDateToConsider = this.endDate;
+      }
+
+    } else {
+      cycleEndDateToConsider = this.endDate;
     }
-    // Ngân sách không lặp lại
-    if (now.isAfter(endDate)) return 0;
-    return endDate.difference(now).inDays + 1;
+
+    if (now.isAfter(cycleEndDateToConsider.copyWith(hour: 23, minute: 59, second: 59))) return 0;
+
+    final nowDateOnly = DateTime(now.year, now.month, now.day);
+    final endDateOnly = DateTime(cycleEndDateToConsider.year, cycleEndDateToConsider.month, cycleEndDateToConsider.day);
+    return endDateOnly.difference(nowDateOnly).inDays;
   }
 
-  // Factory để tạo BudgetDisplayItem từ budget_model.Budget và AppProvider
+
   factory BudgetDisplayItem.fromModel(budget_model.Budget model, AppProvider appProvider) {
     final categoryDetails = CategoryHelper.getCategoryDetails(model.categoryName, 'Chi tiêu');
     double currentSpent = 0;
     final now = DateTime.now();
 
-    // Xác định khoảng thời gian tính chi tiêu cho ngân sách
-    DateTime effectiveStartDate = model.startDate;
-    DateTime effectiveEndDate = model.endDate;
+    DateTime periodStartForSpent;
+    DateTime periodEndForSpent;
 
     if (model.isRecurring) {
-      // Đối với ngân sách lặp lại, chỉ tính chi tiêu trong chu kỳ hiện tại (thường là tháng hiện tại)
-      // Giả sử ngân sách lặp lại hàng tháng, tính từ ngày đầu của tháng hiện tại đến ngày cuối của tháng hiện tại
-      // nhưng bị giới hạn bởi startDate và endDate gốc của budget model
+      final firstDayOfCurrentMonth = DateTime(now.year, now.month, 1);
+      final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
 
-      int currentCycleYear = now.year;
-      int currentCycleMonth = now.month;
+      if (!(model.endDate.isBefore(firstDayOfCurrentMonth) || model.startDate.isAfter(lastDayOfCurrentMonth))) {
+        periodStartForSpent = DateTime(now.year, now.month, model.startDate.day);
+        if (periodStartForSpent.month != now.month) {
+          periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
+        }
 
-      // Tìm ngày bắt đầu của chu kỳ hiện tại dựa trên model.startDate.day
-      DateTime cycleStartDate = DateTime(currentCycleYear, currentCycleMonth, model.startDate.day);
-      // Nếu ngày bắt đầu của chu kỳ hiện tại không hợp lệ (ví dụ ngày 31 tháng 2), lùi về ngày cuối tháng trước
-      if (cycleStartDate.month != currentCycleMonth) {
-        cycleStartDate = DateTime(currentCycleYear, currentCycleMonth, 0); // Ngày cuối của tháng trước
-      }
-
-
-      // Tìm ngày kết thúc của chu kỳ hiện tại dựa trên model.endDate.day
-      DateTime cycleEndDate = DateTime(currentCycleYear, currentCycleMonth, model.endDate.day);
-      // Nếu ngày kết thúc của chu kỳ hiện tại không hợp lệ, lùi về ngày cuối tháng
-      if (cycleEndDate.month != currentCycleMonth) {
-        cycleEndDate = DateTime(currentCycleYear, currentCycleMonth + 1, 0);
-      }
+        if (model.endDate.day >= model.startDate.day || (model.startDate.month == model.endDate.month && model.startDate.year == model.endDate.year)) {
+          periodEndForSpent = DateTime(now.year, now.month, model.endDate.day, 23, 59, 59, 999);
+          if (periodEndForSpent.month != now.month) {
+            periodEndForSpent = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
+          }
+        } else {
+          if (now.day < model.startDate.day) {
+            periodStartForSpent = DateTime(now.year, now.month -1, model.startDate.day);
+            if (periodStartForSpent.month == now.month && now.month != 1) periodStartForSpent = DateTime(now.year, now.month-1, DateTime(now.year, now.month, 0).day);
+            else if (periodStartForSpent.month != 12 && now.month ==1) periodStartForSpent = DateTime(now.year-1, 12, model.startDate.day);
 
 
-      // Đảm bảo cycleStartDate và cycleEndDate không vượt ra ngoài startDate và endDate gốc của model
-      effectiveStartDate = cycleStartDate.isAfter(model.startDate) ? cycleStartDate : model.startDate;
-      effectiveEndDate = cycleEndDate.isBefore(model.endDate) ? cycleEndDate : model.endDate;
+            periodEndForSpent = DateTime(now.year, now.month, model.endDate.day, 23, 59, 59, 999);
+            if (periodEndForSpent.month != now.month) periodEndForSpent = DateTime(now.year, now.month+1,0,23,59,59,999);
 
-      // Nếu chu kỳ hiện tại nằm ngoài khoảng thời gian gốc của ngân sách, không tính chi tiêu
-      if (effectiveStartDate.isAfter(effectiveEndDate)) {
-        currentSpent = 0;
+          } else {
+            periodStartForSpent = DateTime(now.year, now.month, model.startDate.day);
+            if (periodStartForSpent.month != now.month) periodStartForSpent = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
+
+            periodEndForSpent = DateTime(now.year, now.month + 1, model.endDate.day, 23, 59, 59, 999);
+            if (periodEndForSpent.month != (now.month + 1 > 12 ? (now.month+1)%12 : now.month+1) ) {
+              periodEndForSpent = DateTime(now.year, (now.month+1 > 12 ? now.month+2 : now.month+2),0,23,59,59,999);
+              if (periodEndForSpent.year > now.year +1) periodEndForSpent = DateTime(now.year+1, 1,0,23,59,59,999);
+            }
+          }
+        }
+        if(periodStartForSpent.isBefore(model.startDate)) periodStartForSpent = model.startDate;
+        if(periodEndForSpent.isAfter(model.endDate)) periodEndForSpent = model.endDate.copyWith(hour:23, minute:59, second:59, millisecond: 999);
+
+
       } else {
-        final relevantTransactions = appProvider.transactions.where((tx) {
-          return tx.category == model.categoryName &&
-              tx.amount < 0 &&
-              !tx.date.isBefore(effectiveStartDate) &&
-              !tx.date.isAfter(effectiveEndDate);
-        });
-        currentSpent = relevantTransactions.fold(0.0, (sum, tx) => sum + tx.amount.abs());
+        periodStartForSpent = now.add(const Duration(days:1));
+        periodEndForSpent = now;
       }
 
-    } else { // Ngân sách không lặp lại
+    } else {
+      periodStartForSpent = model.startDate;
+      periodEndForSpent = model.endDate.copyWith(hour: 23, minute: 59, second: 59, millisecond: 999);
+    }
+
+    if (!periodStartForSpent.isAfter(periodEndForSpent)) {
       final relevantTransactions = appProvider.transactions.where((tx) {
         return tx.category == model.categoryName &&
             tx.amount < 0 &&
-            !tx.date.isBefore(effectiveStartDate) &&
-            !tx.date.isAfter(effectiveEndDate);
+            !tx.date.isBefore(periodStartForSpent) &&
+            !tx.date.isAfter(periodEndForSpent);
       });
       currentSpent = relevantTransactions.fold(0.0, (sum, tx) => sum + tx.amount.abs());
     }
-
 
     return BudgetDisplayItem(
       id: model.id,
@@ -160,8 +172,8 @@ class BudgetDisplayItem {
       color: categoryDetails['color'] as Color,
       amount: model.amount,
       spent: currentSpent,
-      startDate: model.startDate, // Giữ lại startDate gốc để hiển thị
-      endDate: model.endDate,     // Giữ lại endDate gốc để hiển thị
+      startDate: model.startDate,
+      endDate: model.endDate,
       isRecurring: model.isRecurring,
     );
   }
@@ -186,12 +198,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
   final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '\u0111', decimalDigits: 0);
   final DateFormat _dateFormatter = DateFormat('dd/MM');
 
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Gọi _filterAndCalculateBudgets ở đây để nó được gọi khi AppProvider thay đổi
-    // và cũng được gọi lần đầu sau initState
     final appProvider = Provider.of<AppProvider>(context);
     _filterAndCalculateBudgets(appProvider);
   }
@@ -200,36 +209,27 @@ class _BudgetScreenState extends State<BudgetScreen> {
   void _filterAndCalculateBudgets(AppProvider appProvider) {
     final now = DateTime.now();
     final firstDayCurrentMonth = DateTime(now.year, now.month, 1);
-    final lastDayCurrentMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayCurrentMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
 
     List<BudgetDisplayItem> allDisplayBudgets = appProvider.budgets
         .map((modelBudget) => BudgetDisplayItem.fromModel(modelBudget, appProvider))
         .toList();
-
-    // setState không cần thiết ở đây nếu _filterAndCalculateBudgets được gọi từ build/didChangeDependencies
-    // và Consumer/Selector được sử dụng đúng cách. Tuy nhiên, để đảm bảo UI cập nhật khi filter thay đổi,
-    // chúng ta vẫn có thể giữ setState, nhưng cần cẩn thận để tránh vòng lặp build vô hạn.
-    // Tạm thời vẫn dùng setState để đảm bảo cập nhật UI khi _selectedPeriod thay đổi.
 
     List<BudgetDisplayItem> tempFilteredBudgets;
 
     if (_selectedPeriod == BudgetPeriodFilter.thisMonth) {
       tempFilteredBudgets = allDisplayBudgets.where((b) {
         if (b.isRecurring) {
-          // Ngân sách lặp lại: kiểm tra xem chu kỳ hiện tại (tháng này) có hiệu lực không
-          DateTime cycleStartDateForCurrentMonth = DateTime(now.year, now.month, b.startDate.day);
-          if (cycleStartDateForCurrentMonth.month != now.month) { // Xử lý ngày không hợp lệ (vd: 31/2)
-            cycleStartDateForCurrentMonth = DateTime(now.year, now.month + 1, 0); // Lấy ngày cuối của tháng hiện tại
+          DateTime cycleStartForCurrentMonth = DateTime(now.year, now.month, b.startDate.day);
+          if (cycleStartForCurrentMonth.month != now.month) {
+            cycleStartForCurrentMonth = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
           }
-
-          DateTime cycleEndDateForCurrentMonth = DateTime(now.year, now.month, b.endDate.day);
-          if (cycleEndDateForCurrentMonth.month != now.month) { // Xử lý ngày không hợp lệ
-            cycleEndDateForCurrentMonth = DateTime(now.year, now.month + 1, 0);
+          DateTime cycleEndForCurrentMonth = DateTime(now.year, now.month, b.endDate.day);
+          if (cycleEndForCurrentMonth.month != now.month) {
+            cycleEndForCurrentMonth = DateTime(now.year, now.month + 1, 0);
           }
-          // Đảm bảo chu kỳ hiện tại nằm trong khoảng startDate, endDate gốc
-          return !cycleStartDateForCurrentMonth.isAfter(b.endDate) && !cycleEndDateForCurrentMonth.isBefore(b.startDate);
-
-        } else { // Ngân sách không lặp lại
+          return !cycleStartForCurrentMonth.isAfter(b.endDate) && !cycleEndForCurrentMonth.isBefore(b.startDate);
+        } else {
           return !(lastDayCurrentMonth.isBefore(b.startDate) || firstDayCurrentMonth.isAfter(b.endDate));
         }
       }).toList();
@@ -239,26 +239,39 @@ class _BudgetScreenState extends State<BudgetScreen> {
       tempFilteredBudgets = List.from(allDisplayBudgets);
     }
 
-    // Cập nhật state chỉ khi có sự thay đổi thực sự để tránh vòng lặp build không cần thiết
-    // So sánh _filteredBudgets hiện tại với tempFilteredBudgets
-    // Đây là một cách so sánh đơn giản, có thể cần tối ưu hơn cho danh sách lớn
-    bool listsAreEqual = _filteredBudgets.length == tempFilteredBudgets.length &&
-        _filteredBudgets.every((item) => tempFilteredBudgets.any((other) => other.id == item.id && other.spent == item.spent));
+    double tempOverallBudgeted = tempFilteredBudgets.fold(0.0, (sum, b) => sum + b.amount);
+    double tempOverallSpent = tempFilteredBudgets.fold(0.0, (sum, b) => sum + b.spent);
 
-
-    if (!listsAreEqual ||
-        _overallBudgetedAmount != tempFilteredBudgets.fold(0.0, (sum, b) => sum + b.amount) ||
-        _overallSpentAmount != tempFilteredBudgets.fold(0.0, (sum, b) => sum + b.spent)
-    ) {
-      if(mounted){
-        setState(() {
-          _filteredBudgets = tempFilteredBudgets;
-          _overallBudgetedAmount = _filteredBudgets.fold(0.0, (sum, b) => sum + b.amount);
-          _overallSpentAmount = _filteredBudgets.fold(0.0, (sum, b) => sum + b.spent);
-        });
-      }
+    if (mounted &&
+        (!listEquals(_filteredBudgets, tempFilteredBudgets) ||
+            _overallBudgetedAmount != tempOverallBudgeted ||
+            _overallSpentAmount != tempOverallSpent)) {
+      setState(() {
+        _filteredBudgets = tempFilteredBudgets;
+        _overallBudgetedAmount = tempOverallBudgeted;
+        _overallSpentAmount = tempOverallSpent;
+      });
     }
   }
+
+  bool listEquals<T>(List<T> a, List<T> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        if (a[i] is BudgetDisplayItem && b[i] is BudgetDisplayItem) {
+          if ((a[i] as BudgetDisplayItem).id != (b[i] as BudgetDisplayItem).id ||
+              (a[i] as BudgetDisplayItem).spent != (b[i] as BudgetDisplayItem).spent ||
+              (a[i] as BudgetDisplayItem).amount != (b[i] as BudgetDisplayItem).amount) {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
 
   void _navigateToAddEditBudgetScreen({budget_model.Budget? budget}) async {
     final result = await Navigator.push(
@@ -268,8 +281,50 @@ class _BudgetScreenState extends State<BudgetScreen> {
       ),
     );
     if (result == true && mounted) {
-      // AppProvider đã được cập nhật và sẽ trigger rebuild thông qua Consumer
-      // Không cần gọi _filterAndCalculateBudgets ở đây nữa vì didChangeDependencies hoặc build của Consumer sẽ xử lý
+      // No need to call _filterAndCalculateBudgets here,
+      // Consumer and didChangeDependencies will handle it.
+    }
+  }
+
+  Future<void> _confirmDeleteBudget(budget_model.Budget budgetToDelete) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Xóa Ngân Sách?'),
+          content: Text('Bạn có chắc chắn muốn xóa ngân sách "${budgetToDelete.name}" không?'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Hủy'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+              child: const Text('Xóa'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true && mounted) {
+      final appProvider = Provider.of<AppProvider>(context, listen: false);
+      try {
+        await appProvider.deleteBudget(budgetToDelete.id);
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã xóa ngân sách "${budgetToDelete.name}".')),
+          );
+        }
+      } catch (e) {
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi khi xóa ngân sách: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
     }
   }
 
@@ -279,9 +334,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final theme = Theme.of(context);
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
-        // Gọi _filterAndCalculateBudgets ở đây để đảm bảo nó được cập nhật khi
-        // appProvider.budgets hoặc appProvider.transactions thay đổi.
-        // Sử dụng addPostFrameCallback để tránh setState trong khi build.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _filterAndCalculateBudgets(appProvider);
@@ -296,21 +348,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
             children: [
               _buildOverallSummary(theme),
               _buildPeriodFilterChips(theme, appProvider),
-              const Divider(height: 1),
+              const Divider(height: 1, thickness: 1.2),
               Expanded(
                 child: appProvider.isLoading && _filteredBudgets.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : _filteredBudgets.isEmpty
                     ? _buildEmptyState(theme)
                     : ListView.builder(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 80.0),
                   itemCount: _filteredBudgets.length,
                   itemBuilder: (context, index) {
                     final budgetItem = _filteredBudgets[index];
                     final originalBudgetModel = appProvider.budgets.firstWhere(
                             (b) => b.id == budgetItem.id,
                         orElse: () => budget_model.Budget(
-                            id: budgetItem.id, // Nên có id để tránh lỗi
+                            id: budgetItem.id,
                             name: budgetItem.name,
                             categoryName: budgetItem.categoryName,
                             amount: budgetItem.amount,
@@ -340,6 +392,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     double overallProgress = _overallBudgetedAmount > 0 ? (_overallSpentAmount / _overallBudgetedAmount).clamp(0.0, 1.0) : 0.0;
     bool isOverallOverBudget = _overallSpentAmount > _overallBudgetedAmount;
     Color overallProgressColor = isOverallOverBudget ? Colors.red.shade700 : theme.colorScheme.secondary;
+    // String centerText = _overallBudgetedAmount > 0 ? '${(overallProgress * 100).toStringAsFixed(0)}%' : 'N/A'; // Không dùng nữa
 
     List<PieChartSectionData> sections = [];
     if (_overallBudgetedAmount > 0) {
@@ -347,14 +400,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
         color: overallProgressColor,
         value: _overallSpentAmount.clamp(0, _overallBudgetedAmount),
         title: '',
-        radius: _touchedIndexDonut == 0 ? 22 : 18,
+        radius: _touchedIndexDonut == 0 ? 25 : 20,
+        borderSide: _touchedIndexDonut == 0 ? BorderSide(color: overallProgressColor.withOpacity(0.5), width: 2) : null,
       ));
       if (_overallSpentAmount < _overallBudgetedAmount) {
         sections.add(PieChartSectionData(
           color: Colors.grey.shade300,
-          value: (_overallBudgetedAmount - _overallSpentAmount).abs(), // Đảm bảo giá trị dương
+          value: (_overallBudgetedAmount - _overallSpentAmount).abs(),
           title: '',
-          radius: _touchedIndexDonut == 1 ? 22 : 18,
+          radius: _touchedIndexDonut == 1 ? 25 : 20,
+          borderSide: _touchedIndexDonut == 1 ? BorderSide(color: Colors.grey.shade400, width: 2) : null,
         ));
       }
     } else {
@@ -362,13 +417,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
         color: Colors.grey.shade300,
         value: 1,
         title: '',
-        radius: 18,
+        radius: 20,
       ));
     }
 
     return Container(
       padding: const EdgeInsets.all(16.0),
-      margin: const EdgeInsets.all(12.0),
+      margin: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 8.0),
       decoration: BoxDecoration(
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(16.0),
@@ -384,17 +439,23 @@ class _BudgetScreenState extends State<BudgetScreen> {
       child: Row(
         children: [
           SizedBox(
-            width: 70,
-            height: 70,
+            width: 80,
+            height: 80,
             child: PieChart(
               PieChartData(
-                sectionsSpace: sections.length > 1 ? 2 : 0, // Chỉ thêm space nếu có nhiều hơn 1 section
-                centerSpaceRadius: 25,
+                sectionsSpace: sections.length > 1 ? 2 : 0,
+                centerSpaceRadius: 30,
                 startDegreeOffset: -90,
                 sections: sections,
                 pieTouchData: PieTouchData(
                   touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                    // Không cần setState ở đây nếu không thay đổi _touchedIndexDonut
+                    setState(() {
+                      if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                        _touchedIndexDonut = -1;
+                        return;
+                      }
+                      _touchedIndexDonut = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                    });
                   },
                 ),
               ),
@@ -406,27 +467,36 @@ class _BudgetScreenState extends State<BudgetScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Tổng quan ngân sách',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  'Tổng quan Ngân sách',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Đã chi:',
+                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                ),
+                Text(
+                  currencyFormatter.format(_overallSpentAmount),
+                  style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.error, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Đã chi: ${currencyFormatter.format(_overallSpentAmount)}',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+                  'Tổng đặt:',
+                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
                 Text(
-                  'Tổng đặt: ${currencyFormatter.format(_overallBudgetedAmount)}',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
+                  currencyFormatter.format(_overallBudgetedAmount),
+                  style: theme.textTheme.titleSmall?.copyWith(color: Colors.grey[800], fontWeight: FontWeight.w600),
                 ),
                 if (_overallBudgetedAmount > 0)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
+                    padding: const EdgeInsets.only(top: 6.0),
                     child: Text(
                       isOverallOverBudget
-                          ? 'Vượt: ${currencyFormatter.format(_overallSpentAmount - _overallBudgetedAmount)} (${(overallProgress * 100).toStringAsFixed(0)}%)'
-                          : 'Còn lại: ${currencyFormatter.format(_overallBudgetedAmount - _overallSpentAmount)} (${(overallProgress * 100).toStringAsFixed(0)}%)',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                          ? 'Vượt: ${currencyFormatter.format(_overallSpentAmount - _overallBudgetedAmount)}'
+                          : 'Còn lại: ${currencyFormatter.format(_overallBudgetedAmount - _overallSpentAmount)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
                         color: isOverallOverBudget ? Colors.red.shade700 : Colors.green.shade700,
                       ),
                     ),
@@ -439,44 +509,43 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
+
   Widget _buildPeriodFilterChips(ThemeData theme, AppProvider appProvider) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: BudgetPeriodFilter.values.where((p) => p != BudgetPeriodFilter.custom).map((period) {
-          bool isSelected = _selectedPeriod == period;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: ChoiceChip(
-              label: Text(period.displayName),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) {
-                  setState(() { // setState ở đây để cập nhật _selectedPeriod ngay lập tức
-                    _selectedPeriod = period;
-                  });
-                  // _filterAndCalculateBudgets sẽ được gọi lại trong build của Consumer
-                }
-              },
-              backgroundColor: isSelected ? theme.colorScheme.primary.withOpacity(0.1) : Colors.grey[200],
-              selectedColor: theme.colorScheme.primary.withOpacity(0.25),
-              labelStyle: TextStyle(
-                  color: isSelected ? theme.colorScheme.primary : Colors.black87,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 13
+      child: SizedBox(
+        height: 40,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: BudgetPeriodFilter.values.where((p) => p != BudgetPeriodFilter.custom).map((period) {
+            bool isSelected = _selectedPeriod == period;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: ChoiceChip(
+                label: Text(period.displayName),
+                selected: isSelected,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() {
+                      _selectedPeriod = period;
+                    });
+                  }
+                },
+                labelStyle: TextStyle(
+                    color: isSelected ? theme.colorScheme.onPrimary : theme.textTheme.bodyLarge?.color,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13
+                ),
+                selectedColor: theme.colorScheme.primary,
+                backgroundColor: theme.cardColor,
+                elevation: isSelected ? 2 : 0,
+                pressElevation: 4,
+                shape: StadiumBorder(side: BorderSide(color: isSelected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant, width: 1.2)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                      color: isSelected ? theme.colorScheme.primary : Colors.grey.shade300,
-                      width: 1.2
-                  )
-              ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -488,18 +557,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_rounded, size: 80, color: Colors.grey[350]),
+            Icon(Icons.inbox_rounded, size: 70, color: Colors.grey[350]),
             const SizedBox(height: 20),
             Text(
-              'Không có ngân sách nào.',
-              style: theme.textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
+              'Không có ngân sách nào',
+              style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey[700]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               _selectedPeriod == BudgetPeriodFilter.thisMonth
-                  ? 'Không có ngân sách nào được đặt cho tháng này. Hãy tạo một ngân sách mới!'
-                  : 'Hãy tạo ngân sách đầu tiên của bạn bằng cách nhấn nút "+" bên dưới.',
+                  ? 'Hãy tạo ngân sách cho tháng này nhé!'
+                  : 'Nhấn nút "+" để tạo ngân sách đầu tiên của bạn.',
               style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
               textAlign: TextAlign.center,
             ),
@@ -515,10 +584,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final String periodString = budgetItem.isRecurring
         ? 'Hàng tháng (${_dateFormatter.format(budgetItem.startDate)} - ${_dateFormatter.format(budgetItem.endDate)})'
         : '${_dateFormatter.format(budgetItem.startDate)} - ${_dateFormatter.format(budgetItem.endDate)}';
+    final int daysLeft = budgetItem.daysLeft;
+    final DateTime now = DateTime.now(); // ***** ĐỊNH NGHĨA BIẾN now Ở ĐÂY *****
+
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
-      elevation: 1.5,
+      elevation: 2.0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
       child: InkWell(
         onTap: () => _navigateToAddEditBudgetScreen(budget: originalBudgetModel),
@@ -529,12 +601,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
                     backgroundColor: budgetItem.color.withOpacity(0.15),
                     foregroundColor: budgetItem.color,
-                    radius: 18,
-                    child: Icon(budgetItem.icon, size: 18),
+                    radius: 20,
+                    child: Icon(budgetItem.icon, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -543,20 +616,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       children: [
                         Text(
                           budgetItem.name,
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, fontSize: 16),
                           overflow: TextOverflow.ellipsis,
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           periodString,
-                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600], fontSize: 11),
+                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600], fontSize: 11.5),
                         ),
                       ],
                     ),
                   ),
-                  if (budgetItem.isOverBudget)
-                    const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20)
-                  else if (isNearLimit)
-                    const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline_rounded, color: Colors.grey[600], size: 22),
+                    tooltip: 'Xóa ngân sách',
+                    onPressed: () => _confirmDeleteBudget(originalBudgetModel),
+                  )
                 ],
               ),
               const SizedBox(height: 12),
@@ -565,11 +640,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 children: [
                   Text(
                     'Đã chi: ${currencyFormatter.format(budgetItem.spent)}',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[800], fontSize: 13),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[800], fontSize: 13.5),
                   ),
                   Text(
-                    'Tổng: ${currencyFormatter.format(budgetItem.amount)}',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[800], fontSize: 13),
+                    '/ ${currencyFormatter.format(budgetItem.amount)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600], fontSize: 13.5),
                   ),
                 ],
               ),
@@ -578,7 +653,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 borderRadius: BorderRadius.circular(5),
                 child: LinearProgressIndicator(
                   value: budgetItem.progress,
-                  backgroundColor: Colors.grey[300],
+                  backgroundColor: progressColor.withOpacity(0.2),
                   valueColor: AlwaysStoppedAnimation<Color>(progressColor),
                   minHeight: 10,
                 ),
@@ -593,15 +668,27 @@ class _BudgetScreenState extends State<BudgetScreen> {
                         : 'Còn lại: ${currencyFormatter.format(budgetItem.remainingAmount)}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      fontSize: 13,
                       color: budgetItem.isOverBudget ? Colors.red.shade700 : Colors.green.shade700,
                     ),
                   ),
-                  Text(
-                    budgetItem.isRecurring ? '${budgetItem.daysLeft} ngày còn lại' : (budgetItem.daysLeft > 0 ? '${budgetItem.daysLeft} ngày còn lại' : 'Đã kết thúc'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
-                        fontStyle: FontStyle.italic
-                    ),
+                  Row(
+                    children: [
+                      Icon(
+                        budgetItem.isOverBudget ? Icons.warning_amber_rounded : (isNearLimit ? Icons.info_outline_rounded : Icons.check_circle_outline_rounded),
+                        color: budgetItem.isOverBudget ? Colors.red.shade600 : (isNearLimit ? Colors.orange.shade600 : Colors.green.shade600),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        daysLeft > 0 ? '$daysLeft ngày còn lại' : (daysLeft == 0 && !now.isAfter(budgetItem.endDate) ? 'Hôm nay' : 'Đã kết thúc'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -612,3 +699,4 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 }
+
